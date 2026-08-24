@@ -11,8 +11,8 @@ android {
         applicationId = "com.mrscanner.omega"
         minSdk = 26
         targetSdk = 34
-        versionCode = 222
-        versionName = "2.2.2-stable"
+        versionCode = 230
+        versionName = "2.3.0-final"
         buildConfigField("String", "ENGINE", "\"confidence-v3\"")
         buildConfigField("int", "PLUGIN_CATALOG_SIZE", "41")
         vectorDrawables.useSupportLibrary = true

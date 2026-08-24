@@ -3,6 +3,7 @@ java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaV
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":core"))
+    implementation("org.xerial:sqlite-jdbc:3.45.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }

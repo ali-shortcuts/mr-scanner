@@ -185,7 +185,7 @@ class CheckpointCmd : CliCommand {
             "clear" -> {
                 val id = args.positionals.getOrNull(1)
                 if (id == null) emit(err("id required")) else { (engine.database?.checkpoints ?: engine.checkpointStore).let { /* type mismatch */ }
-                    if (engine.database != null) engine.database!!.checkpoints.clear(id) else engine.checkpointStore.clear(id); emit(out("cleared $id")) }
+                    engine.database?.checkpoints?.clear(id) ?: engine.checkpointStore.clear(id); emit(out("cleared $id")) }
             }
             else -> emit(err(usage))
         }

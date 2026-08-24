@@ -7,99 +7,106 @@ import java.io.File
 import java.security.MessageDigest
 import java.sql.Connection
 import java.sql.DriverManager
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * SQLite-backed persistence (Room-compatible schema).
- * On Android this file can be swapped for Room DAOs with identical table shapes.
- * On JVM desktop we use the bundled JDBC SQLite when available, else durable TSV.
+ * Persistence facade.
  *
- * Schema matches architecture §18:
- *  checkpoints(scanId PK, schemaVersion, configHash, cursorIndex, totalHosts, completedHostsJson, createdAt, updatedAt)
- *  hole_age(holeId PK, host, technique, status, firstSeenAt, lastConfirmedAt, closedAt, closedReason, lastConfidence, lastVerdict, lastSeenWeakAt)
+ * ANDROID: always uses file-backed HoleAgeStore/CheckpointStore.
+ * Never loads org.xerial.sqlite-jdbc (desktop natives crash Android).
+ *
+ * DESKTOP/CLI: may use JDBC SQLite when the driver is on the classpath.
  */
-class OmegaDatabase private constructor(private val dbFile: File) {
-    /**
-     * CRITICAL: org.xerial:sqlite-jdbc ships desktop natives (Win/Mac/Linux)
-     * and will crash Android at Class.forName/load. Only enable JDBC on pure JVM.
-     */
-    private val isAndroid: Boolean = try {
-        Class.forName("android.os.Build"); true
-    } catch (_: Throwable) { false }
-
-    private val jdbcAvailable: Boolean = if (isAndroid) false else try {
-        Class.forName("org.sqlite.JDBC"); true
-    } catch (_: Throwable) { false }
-
-    private val conn: Connection? = if (jdbcAvailable) {
-        try {
-            DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}").also { initSchema(it) }
-        } catch (_: Throwable) {
-            null
-        }
-    } else null
-
-    // fallback stores
+class OmegaDatabase private constructor(
+    private val dbFile: File,
+    private val conn: Connection?
+) {
     private val holeFallback = HoleAgeStore(dbFile.parentFile)
     private val cpFallback = CheckpointStore(dbFile.parentFile)
 
     val holes = HoleRepository(conn, holeFallback)
     val checkpoints = CheckpointRepository(conn, cpFallback)
 
-    private fun initSchema(c: Connection) {
-        c.createStatement().use { st ->
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS checkpoints (
-                  scanId TEXT PRIMARY KEY,
-                  schemaVersion INTEGER NOT NULL,
-                  configHash TEXT NOT NULL,
-                  cursorIndex INTEGER NOT NULL,
-                  totalHosts INTEGER NOT NULL,
-                  completedHostsJson TEXT NOT NULL,
-                  createdAt INTEGER NOT NULL,
-                  updatedAt INTEGER NOT NULL
-                );
-                """.trimIndent()
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS hole_age (
-                  holeId TEXT PRIMARY KEY,
-                  host TEXT NOT NULL,
-                  technique TEXT NOT NULL,
-                  status TEXT NOT NULL,
-                  firstSeenAt INTEGER NOT NULL,
-                  lastConfirmedAt INTEGER NOT NULL,
-                  closedAt INTEGER,
-                  closedReason TEXT,
-                  lastConfidence REAL NOT NULL,
-                  lastVerdict TEXT NOT NULL,
-                  lastSeenWeakAt INTEGER
-                );
-                CREATE INDEX IF NOT EXISTS idx_hole_host ON hole_age(host);
-                CREATE INDEX IF NOT EXISTS idx_hole_status ON hole_age(status);
-                """.trimIndent()
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS host_fingerprints (
-                  host TEXT PRIMARY KEY,
-                  faviconHash TEXT,
-                  jarmLite TEXT,
-                  ja3Self TEXT,
-                  techTagsJson TEXT,
-                  updatedAt INTEGER NOT NULL
-                );
-                """.trimIndent()
-            )
-        }
-    }
-
     companion object {
         fun open(dir: File): OmegaDatabase {
             dir.mkdirs()
-            return OmegaDatabase(File(dir, "omega.db"))
+            val dbFile = File(dir, "omega.db")
+            val conn = openJdbcOnlyOnDesktop(dbFile)
+            if (conn != null) {
+                try {
+                    initSchema(conn)
+                } catch (_: Throwable) {
+                    try { conn.close() } catch (_: Throwable) {}
+                    return OmegaDatabase(dbFile, null)
+                }
+            }
+            return OmegaDatabase(dbFile, conn)
+        }
+
+        private fun isAndroidRuntime(): Boolean = try {
+            Class.forName("android.os.Build")
+            true
+        } catch (_: Throwable) {
+            false
+        }
+
+        private fun openJdbcOnlyOnDesktop(dbFile: File): Connection? {
+            if (isAndroidRuntime()) return null
+            return try {
+                Class.forName("org.sqlite.JDBC")
+                DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}")
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        private fun initSchema(c: Connection) {
+            c.createStatement().use { st ->
+                st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS checkpoints (
+                      scanId TEXT PRIMARY KEY,
+                      schemaVersion INTEGER NOT NULL,
+                      configHash TEXT NOT NULL,
+                      cursorIndex INTEGER NOT NULL,
+                      totalHosts INTEGER NOT NULL,
+                      completedHostsJson TEXT NOT NULL,
+                      createdAt INTEGER NOT NULL,
+                      updatedAt INTEGER NOT NULL
+                    );
+                    """.trimIndent()
+                )
+                st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS hole_age (
+                      holeId TEXT PRIMARY KEY,
+                      host TEXT NOT NULL,
+                      technique TEXT NOT NULL,
+                      status TEXT NOT NULL,
+                      firstSeenAt INTEGER NOT NULL,
+                      lastConfirmedAt INTEGER NOT NULL,
+                      closedAt INTEGER,
+                      closedReason TEXT,
+                      lastConfidence REAL NOT NULL,
+                      lastVerdict TEXT NOT NULL,
+                      lastSeenWeakAt INTEGER
+                    );
+                    """.trimIndent()
+                )
+                st.execute("CREATE INDEX IF NOT EXISTS idx_hole_host ON hole_age(host);")
+                st.execute("CREATE INDEX IF NOT EXISTS idx_hole_status ON hole_age(status);")
+                st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS host_fingerprints (
+                      host TEXT PRIMARY KEY,
+                      faviconHash TEXT,
+                      jarmLite TEXT,
+                      ja3Self TEXT,
+                      techTagsJson TEXT,
+                      updatedAt INTEGER NOT NULL
+                    );
+                    """.trimIndent()
+                )
+            }
         }
     }
 }
@@ -110,7 +117,8 @@ class HoleRepository(
 ) {
     fun applyVerdict(host: String, verdict: Verdict, confidence: Double, technique: String = "aggregate") {
         if (conn == null) {
-            fallback.applyVerdict(host, verdict, confidence, technique); return
+            fallback.applyVerdict(host, verdict, confidence, technique)
+            return
         }
         val id = holeId(host, technique)
         val now = System.currentTimeMillis()
@@ -128,7 +136,7 @@ class HoleRepository(
             when (openOnly) {
                 true -> append(" WHERE status='open'")
                 false -> append(" WHERE status='closed'")
-                null -> {}
+                null -> Unit
             }
             append(" ORDER BY lastConfirmedAt DESC")
         }
@@ -156,7 +164,8 @@ class HoleRepository(
     }
 
     private fun upsertOpen(id: String, host: String, technique: String, now: Long, conf: Double, v: Verdict) {
-        conn!!.prepareStatement(
+        val c = conn ?: return
+        c.prepareStatement(
             """
             INSERT INTO hole_age(holeId,host,technique,status,firstSeenAt,lastConfirmedAt,closedAt,closedReason,lastConfidence,lastVerdict,lastSeenWeakAt)
             VALUES(?,?,?,?,?,?,NULL,NULL,?,?,NULL)
@@ -171,7 +180,8 @@ class HoleRepository(
     }
 
     private fun upsertClosed(id: String, host: String, technique: String, now: Long, conf: Double, v: Verdict) {
-        conn!!.prepareStatement(
+        val c = conn ?: return
+        c.prepareStatement(
             """
             INSERT INTO hole_age(holeId,host,technique,status,firstSeenAt,lastConfirmedAt,closedAt,closedReason,lastConfidence,lastVerdict,lastSeenWeakAt)
             VALUES(?,?,?,?,?,?,?,?,?,?,NULL)
@@ -187,7 +197,8 @@ class HoleRepository(
     }
 
     private fun touchWeak(id: String, now: Long, conf: Double, v: Verdict) {
-        conn!!.prepareStatement(
+        val c = conn ?: return
+        c.prepareStatement(
             "UPDATE hole_age SET lastSeenWeakAt=?, lastConfidence=?, lastVerdict=? WHERE holeId=?"
         ).use { ps ->
             ps.setLong(1, now); ps.setDouble(2, conf); ps.setString(3, v.name); ps.setString(4, id)
@@ -206,7 +217,9 @@ class CheckpointRepository(
     private val fallback: CheckpointStore
 ) {
     fun save(cp: CheckpointRecord) {
-        if (conn == null) { fallback.save(cp); return }
+        if (conn == null) {
+            fallback.save(cp); return
+        }
         cp.updatedAt = System.currentTimeMillis()
         val json = cp.completedHosts.joinToString("\n")
         conn.prepareStatement(
@@ -256,7 +269,11 @@ class CheckpointRepository(
     }
 
     fun clear(id: String) {
-        if (conn == null) { fallback.clear(id); return }
-        conn.prepareStatement("DELETE FROM checkpoints WHERE scanId=?").use { it.setString(1, id); it.executeUpdate() }
+        if (conn == null) {
+            fallback.clear(id); return
+        }
+        conn.prepareStatement("DELETE FROM checkpoints WHERE scanId=?").use {
+            it.setString(1, id); it.executeUpdate()
+        }
     }
 }

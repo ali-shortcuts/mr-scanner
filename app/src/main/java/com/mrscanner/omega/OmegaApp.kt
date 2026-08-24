@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
 import com.mrscanner.omega.core.plugin.NetworkProfile
@@ -31,6 +32,7 @@ class OmegaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        runCatching { AppCompatDelegate.setCompatVectorFromResourcesEnabled(true) }
         // Step-by-step, each step isolated so one failure never kills the process.
         settings = runCatching { ConsoleSettings() }.getOrElse {
             Log.e(TAG, "ConsoleSettings failed", it)
