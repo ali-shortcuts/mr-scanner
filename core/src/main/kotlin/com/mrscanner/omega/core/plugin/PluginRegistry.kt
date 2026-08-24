@@ -29,6 +29,7 @@ object PluginRegistry {
         if (settings.testCdnEdge) all += CdnEdgePlugin()
         if (settings.testAlpnMatrix) all += AlpnMatrixPlugin()
         if (settings.testQuic) all += QuicPlugin()
+        all += TimeConsistencyPlugin()
         return all
     }
 

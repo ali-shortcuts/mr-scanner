@@ -8,13 +8,22 @@
 | | |
 |---|---|
 | Package | `com.mrscanner.omega` |
-| Version | **2.1.0-omega** |
+| Version | **2.2.0-omega** |
 | Engine | Confidence v3 (symmetric log-odds) |
 | Plugins | **41 catalog · 37 active by default** |
 | minSdk / targetSdk | 26 / 34 |
 
 ---
 
+
+## What's new in 2.2.0
+
+- **Real DNS-over-TLS (DoT)** answers, not just port 853 open
+- **QUIC/H3** via UDP path + Alt-Svc + HTTPS RR
+- **Cellular bind** + SIM operator detect (zero-rate path)
+- **APK tab** in app (pick & analyze APK)
+- **WorkManager** 12h hole re-verify
+- Cert SHA-256 meta in ApkStaticAnalyzer
 
 ## What's new in 2.1.0 (deep engine)
 
@@ -34,15 +43,15 @@
 
 | APK | ABI | Recommended for |
 |---|---|---|
-| [`MrScannerOmega-2.1.0-universal.apk`](dist/MrScannerOmega-2.1.0-universal.apk) | 32+64 | **Default — all phones** |
-| [`MrScannerOmega-2.1.0-arm64-v8a.apk`](dist/MrScannerOmega-2.1.0-arm64-v8a.apk) | 64-bit | Modern phones (2017+) |
-| [`MrScannerOmega-2.1.0-armeabi-v7a.apk`](dist/MrScannerOmega-2.1.0-armeabi-v7a.apk) | 32-bit | Older devices |
+| [`MrScannerOmega-2.2.0-universal.apk`](dist/MrScannerOmega-2.2.0-universal.apk) | 32+64 | **Default — all phones** |
+| [`MrScannerOmega-2.2.0-arm64-v8a.apk`](dist/MrScannerOmega-2.2.0-arm64-v8a.apk) | 64-bit | Modern phones (2017+) |
+| [`MrScannerOmega-2.2.0-armeabi-v7a.apk`](dist/MrScannerOmega-2.2.0-armeabi-v7a.apk) | 32-bit | Older devices |
 
 Also: CLI zip · full source tarball · [`SPECS.md`](dist/SPECS.md) · [`SHA256SUMS.txt`](dist/SHA256SUMS.txt)  
-GitHub Release: [v2.1.0-omega](https://github.com/ali-shortcuts/mr-scanner/releases/tag/v2.1.0-omega)
+GitHub Release: [v2.2.0-omega](https://github.com/ali-shortcuts/mr-scanner/releases/tag/v2.2.0-omega)
 
 ```bash
-adb install -r dist/MrScannerOmega-2.1.0-universal.apk
+adb install -r dist/MrScannerOmega-2.2.0-universal.apk
 ```
 
 ---
@@ -128,8 +137,8 @@ Unit coverage includes ConfidenceEngineV3 truth table, SAN/wildcard match, DAG t
 Optional secrets for signed release: `RELEASE_KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 
 ```bash
-git tag v2.1.0-omega
-git push origin v2.1.0-omega
+git tag v2.2.0-omega
+git push origin v2.2.0-omega
 ```
 
 ---

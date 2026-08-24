@@ -99,6 +99,14 @@ class ScanEngine(
         val plugins = PluginRegistry.createAll(settings)
         val executor = dag ?: PluginDagExecutor(plugins)
         val ctx = ScanContext(profile = profile, timeoutMs = settings.timeoutMs)
+        // Prefill temporal hole metadata for timeconsistency plugin
+        try {
+            val prev = (database?.holes?.list() ?: holeStore.list()).firstOrNull { it.host == host.trim() }
+            if (prev != null) {
+                ctx.put("hole.lastConfirmedAt", prev.lastConfirmedAt)
+                ctx.put("hole.lastVerdict", prev.lastVerdict)
+            }
+        } catch (_: Exception) {}
         val budget = BudgetGuard.forProfile(profile, settings.budgetProfileOverride)
         val target = ScanTarget(host = host.trim())
         val pluginResults = executor.execute(target, ctx, budget)

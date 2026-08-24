@@ -82,6 +82,18 @@
             android:textSize="12sp" />
 
         <Button
+            android:id="@+id/tabApk"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_tab_inactive"
+            android:text="APK"
+            android:textAllCaps="false"
+            android:textColor="@color/omega_on_bg"
+            android:textSize="12sp" />
+
+        <Button
             android:id="@+id/tabTerm"
             android:layout_width="0dp"
             android:layout_height="40dp"

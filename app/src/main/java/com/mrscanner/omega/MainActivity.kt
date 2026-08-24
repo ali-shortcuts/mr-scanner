@@ -1,8 +1,11 @@
 package com.mrscanner.omega
 
 import android.content.Intent
+import android.app.Activity
+import android.provider.OpenableColumns
 import android.graphics.Color
 import android.net.Uri
+import android.widget.Toast
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -25,6 +28,12 @@ import com.mrscanner.omega.core.plugin.SignalPolarity
 import com.mrscanner.omega.core.plugin.Verdict
 import com.mrscanner.omega.network.AndroidNetworkProfile
 import com.mrscanner.omega.core.update.UpdateChecker
+import com.mrscanner.omega.core.apkanalyzer.ApkStaticAnalyzer
+import com.mrscanner.omega.network.CellularNetworkBinder
+import com.mrscanner.omega.network.SimOperatorDetector
+import com.mrscanner.omega.work.ReverifyScheduler
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +50,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var content: FrameLayout
     private var scanJob: Job? = null
     private var termBusy = false
+    private var apkPickPath: String? = null
+    private val reqPickApk = 4401
     private val tabButtons = mutableListOf<Button>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -52,13 +63,21 @@ class MainActivity : AppCompatActivity() {
 
         val home = findViewById<Button>(R.id.tabHome)
         val scan = findViewById<Button>(R.id.tabScan)
+        val apk = findViewById<Button>(R.id.tabApk)
         val term = findViewById<Button>(R.id.tabTerm)
         val about = findViewById<Button>(R.id.tabAbout)
-        tabButtons.addAll(listOf(home, scan, term, about))
+        tabButtons.addAll(listOf(home, scan, apk, term, about))
         home.setOnClickListener { selectTab(0); showHome() }
         scan.setOnClickListener { selectTab(1); showScan() }
-        term.setOnClickListener { selectTab(2); showTerminal() }
-        about.setOnClickListener { selectTab(3); showAbout() }
+        apk.setOnClickListener { selectTab(2); showApk() }
+        term.setOnClickListener { selectTab(3); showTerminal() }
+        about.setOnClickListener { selectTab(4); showAbout() }
+        // Operator detection + optional cell bind + scheduled reverify
+        val op = SimOperatorDetector.detect(this)
+        if (op.mccMnc != null) {
+            OmegaApp.instance.settings.operatorHint = op.mccMnc
+        }
+        ReverifyScheduler.schedule(this, 12)
         selectTab(0)
         showHome()
     }
@@ -164,6 +183,9 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = false
             results.text = ""
             status.text = "Scanning ${hosts.size}…"
+            // Prefer cellular path when available (zero-rate / operator view)
+            val bind = CellularNetworkBinder.bindToCellular(this@MainActivity)
+            if (bind.bound) status.text = "Scanning ${hosts.size}… [${bind.detail}]"
             OmegaApp.instance.promoteScanService()
             bar.progress = 0
             scanJob = scope.launch {
@@ -194,6 +216,7 @@ class MainActivity : AppCompatActivity() {
                 } finally {
                     collector.cancel()
                     OmegaApp.instance.stopScanService()
+                    CellularNetworkBinder.clearBind(this@MainActivity)
                     btnStart.isEnabled = true
                 }
             }
@@ -243,6 +266,78 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun showApk() {
+        val root = inflate(R.layout.fragment_apk)
+        val pathTv = root.findViewById<TextView>(R.id.apkPath)
+        val reportTv = root.findViewById<TextView>(R.id.apkReport)
+        val btnPick = root.findViewById<Button>(R.id.btnPickApk)
+        val btnGo = root.findViewById<Button>(R.id.btnAnalyzeApk)
+        apkPickPath?.let {
+            pathTv.text = it
+            btnGo.isEnabled = true
+        }
+        btnPick.setOnClickListener {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                    "application/vnd.android.package-archive",
+                    "application/octet-stream",
+                    "*/*"
+                ))
+            }
+            try {
+                startActivityForResult(intent, reqPickApk)
+            } catch (e: Exception) {
+                Toast.makeText(this, "No file picker: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        btnGo.setOnClickListener {
+            val path = apkPickPath ?: return@setOnClickListener
+            btnGo.isEnabled = false
+            reportTv.text = "Analyzing…"
+            scope.launch {
+                try {
+                    val report = ApkStaticAnalyzer.analyze(path)
+                    reportTv.text = ApkStaticAnalyzer.format(report)
+                } catch (e: Exception) {
+                    reportTv.text = "Error: ${e.message}"
+                } finally {
+                    btnGo.isEnabled = true
+                }
+            }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != reqPickApk || resultCode != Activity.RESULT_OK) return
+        val uri = data?.data ?: return
+        scope.launch {
+            try {
+                val name = queryDisplayName(uri) ?: "picked.apk"
+                val out = File(cacheDir, "analyze-$name")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(out).use { output -> input.copyTo(output) }
+                }
+                apkPickPath = out.absolutePath
+                // refresh if on apk tab
+                showApk()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Failed to read APK: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) return c.getString(0)
+        }
+        return uri.lastPathSegment
+    }
+
     /**
      * About screen — architecture §9 + Creator/Support with official icons.
      * Every icon is fully clickable and opens the exact URL.
@@ -270,6 +365,9 @@ class MainActivity : AppCompatActivity() {
             appendLine("Active plugins (settings): $active")
             appendLine("configHash: ${settings.configHash()}")
             appendLine("Network profile: ${OmegaApp.instance.engine.profile}")
+            val opi = SimOperatorDetector.detect(this@MainActivity)
+            appendLine("SIM/operator: ${opi.simOperatorName ?: "-"} ${opi.mccMnc ?: ""}")
+            appendLine("operatorHint: ${OmegaApp.instance.settings.operatorHint ?: "-"}")
             appendLine("minSdk 26 · targetSdk 34")
             appendLine()
             appendLine("Update channel: ali-shortcuts/mr-scanner")

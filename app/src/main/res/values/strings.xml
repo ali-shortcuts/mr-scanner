@@ -47,6 +47,7 @@
     <string name="warning_title">Warning</string>
     <string name="tab_home">Home</string>
     <string name="tab_scan">Scan</string>
+    <string name="tab_apk">APK</string>
     <string name="tab_term">Term</string>
     <string name="tab_about">About</string>
     <string name="subtitle_default">ConfidenceEngineV3 · 41 plugins</string>

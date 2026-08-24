@@ -303,7 +303,7 @@ class UpdateCmd : CliCommand {
     override val name = "update"; override val usage = "update [--repo=owner/name]"; override val help = "Check GitHub Releases for updates"
     override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
         val repo = args.flag("repo") ?: "ali-shortcuts/mr-scanner"
-        val checker = UpdateChecker(repo, "2.1.0-omega")
+        val checker = UpdateChecker(repo, "2.2.0-omega")
         val info = checker.check()
         if (info == null) emit(out("no update (or check failed)"))
         else {

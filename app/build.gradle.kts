@@ -11,10 +11,10 @@ android {
         applicationId = "com.mrscanner.omega"
         minSdk = 26
         targetSdk = 34
-        versionCode = 210
-        versionName = "2.1.0-omega"
+        versionCode = 220
+        versionName = "2.2.0-omega"
         buildConfigField("String", "ENGINE", "\"confidence-v3\"")
-        buildConfigField("int", "PLUGIN_CATALOG_SIZE", "42")
+        buildConfigField("int", "PLUGIN_CATALOG_SIZE", "41")
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
@@ -74,4 +74,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    // Optional Cronet - try resolve; if fails CI still builds without H3 native
+    // implementation("org.chromium.net:cronet-embedded:119.6045.31")
+    // implementation("com.google.net.cronet:cronet-okhttp:0.1.0")
 }

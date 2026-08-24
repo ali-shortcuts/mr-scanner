@@ -25,7 +25,9 @@ object ApkStaticAnalyzer {
         val packagesHints: List<String>,
         val findings: List<Finding>,
         val stringsOfInterest: List<String>,
-        val metaInf: List<String>
+        val metaInf: List<String>,
+        val certFingerprints: List<String> = emptyList(),
+        val exportedHints: List<String> = emptyList()
     )
 
     fun analyze(apkPath: String): Report {
@@ -37,6 +39,8 @@ object ApkStaticAnalyzer {
         val findings = mutableListOf<Finding>()
         val interesting = linkedSetOf<String>()
         val metaInf = mutableListOf<String>()
+        val certFps = mutableListOf<String>()
+        val exportedHints = linkedSetOf<String>()
         var files = 0
         var hasManifest = false
         var debuggable = false
@@ -69,6 +73,12 @@ object ApkStaticAnalyzer {
                                 }
                             }
                             if (s.equals("debuggable", true)) debuggable = true
+                            if (s.equals("exported", true) || s == "true" && packages.isNotEmpty()) {
+                                // collected loosely via nearby component names below
+                            }
+                            if (s.endsWith("Activity") || s.endsWith("Service") || s.endsWith("Receiver") || s.endsWith("Provider")) {
+                                if (s.contains('.')) exportedHints += s
+                            }
                             if (s.contains("usesCleartextTraffic", true) || s.contains("cleartext", true)) {
                                 cleartext = true
                             }
@@ -79,7 +89,15 @@ object ApkStaticAnalyzer {
                         val parts = name.split('/')
                         if (parts.size >= 2) abis += parts[1]
                     }
-                    name.startsWith("META-INF/") -> metaInf += name
+                    name.startsWith("META-INF/") -> {
+                        metaInf += name
+                        if (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".EC") || name.endsWith(".SF")) {
+                            val bytes = zip.getInputStream(e).readBytes()
+                            val sha = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+                                .joinToString("") { "%02x".format(it) }
+                            certFps += "${name.substringAfterLast('/')}:sha256:$sha"
+                        }
+                    }
                     name.endsWith(".js") || name.endsWith(".html") -> {
                         val txt = runCatching {
                             zip.getInputStream(e).bufferedReader().readText()
@@ -176,7 +194,9 @@ object ApkStaticAnalyzer {
             packagesHints = packages.toList().sorted().take(30),
             findings = findings.sortedBy { severityRank(it.severity) },
             stringsOfInterest = interesting.toList().take(50),
-            metaInf = metaInf.take(30)
+            metaInf = metaInf.take(30),
+            certFingerprints = certFps.distinct().take(20),
+            exportedHints = exportedHints.toList().take(40)
         )
     }
 
@@ -215,6 +235,13 @@ object ApkStaticAnalyzer {
         }
         if (report.packagesHints.isNotEmpty()) {
             appendLine("package-hints: ${report.packagesHints.take(15).joinToString()}")
+        }
+        if (report.certFingerprints.isNotEmpty()) {
+            appendLine("cert-meta:")
+            report.certFingerprints.forEach { appendLine("  - $it") }
+        }
+        if (report.exportedHints.isNotEmpty()) {
+            appendLine("component-hints: ${report.exportedHints.take(12).joinToString()}")
         }
     }
 }

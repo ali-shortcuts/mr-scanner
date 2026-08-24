@@ -164,7 +164,7 @@ object DnsUdpClient {
         }
     }
 
-    private fun buildQuery(host: String, type: Int): ByteArray {
+    fun buildQuery(host: String, type: Int): ByteArray {
         val bb = ByteBuffer.allocate(512)
         val id = (System.nanoTime() and 0xFFFF).toInt()
         bb.putShort(id.toShort())
@@ -183,7 +183,7 @@ object DnsUdpClient {
         return out
     }
 
-    private fun parseAAnswers(data: ByteArray, length: Int): List<String> {
+    fun parseAAnswers(data: ByteArray, length: Int): List<String> {
         if (length < 12) return emptyList()
         val bb = ByteBuffer.wrap(data, 0, length)
         bb.position(4)
@@ -215,7 +215,7 @@ object DnsUdpClient {
         return ips
     }
 
-    private fun skipName(bb: ByteBuffer) {
+    fun skipName(bb: ByteBuffer) {
         while (true) {
             val len = bb.get().toInt() and 0xff
             if (len == 0) return

@@ -856,19 +856,47 @@ class EchPlugin : ScanPlugin {
 class DnsTransportPlugin : ScanPlugin {
     override val id = "plugin.host.dnstransport"; override val displayName = "DoT/DoQ"
     override val evidenceClass = EvidenceClass.MODERATE
-    override val cost = PluginCost(1500, 4000, 2)
+    override val cost = PluginCost(3500, 8192, 3)
     override val dependsOn = setOf("dns")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
         return PluginHelpers.safeScan(id, EvidenceClass.MODERATE, t0) {
-            val open = listOf("1.1.1.1", "8.8.8.8", "9.9.9.9").filter {
+            ctx.ensureActive()
+            // Port reachability
+            val open853 = listOf("1.1.1.1", "8.8.8.8", "9.9.9.9").filter {
                 TcpConnect.isAlive(it, 853, ctx.timeoutMs.toInt().coerceAtMost(2000))
             }
-            val signal = if (open.isNotEmpty()) PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "DoT: $open")
-            else PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "DoT closed")
-            PluginResult(id, signal, "DoT open=${open.size}/3", mapOf("dot" to open.joinToString()),
-                durationMs = System.currentTimeMillis() - t0)
+            // Real DoT queries
+            val answers = DoTClient.probeMatrix(target.host, ctx.timeoutMs.toInt().coerceAtMost(3500))
+            ctx.put("dns.dot.answers", answers)
+            val ok = answers.filter { it.addresses.isNotEmpty() }
+            val sets = ok.map { it.addresses.toSet() }
+            val divergent = if (sets.size >= 2) {
+                val inter = sets.reduce { a, b -> a.intersect(b) }
+                val uni = sets.reduce { a, b -> a.union(b) }
+                uni - inter
+            } else emptySet()
+            val signal = when {
+                ok.size >= 2 && divergent.isNotEmpty() ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE,
+                        "DoT works (${ok.size}) with divergence=${divergent.size}")
+                ok.isNotEmpty() ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE,
+                        "DoT resolved via ${ok.joinToString { it.resolver }}")
+                open853.isNotEmpty() ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "port 853 open but DoT query failed")
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "DoT unavailable")
+            }
+            PluginResult(id, signal,
+                "DoT ok=${ok.size}/3 port853=${open853.size} divergent=${divergent.size}",
+                mapOf(
+                    "dot" to ok.joinToString { "${it.resolver}:${it.addresses.joinToString()}" },
+                    "port853" to open853.joinToString(),
+                    "divergent" to divergent.joinToString(),
+                    "errors" to answers.filter { it.error != null }.joinToString { "${it.resolver}:${it.error}" }
+                ), durationMs = System.currentTimeMillis() - t0)
         }
     }
 }
@@ -919,28 +947,53 @@ class AlpnMatrixPlugin : ScanPlugin {
 class QuicPlugin : ScanPlugin {
     override val id = "plugin.host.quic"; override val displayName = "QUIC/H3"
     override val evidenceClass = EvidenceClass.MODERATE
-    override val cost = PluginCost(1500, 4000, 1)
-    override val dependsOn = setOf("dns")
+    override val cost = PluginCost(2000, 8192, 2)
+    override val dependsOn = setOf("dns", "https")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
         return PluginHelpers.safeScan(id, EvidenceClass.MODERATE, t0) {
             ctx.ensureActive()
-            val r = QuicProbe.probe(target.host, 443, ctx.timeoutMs.toInt().coerceAtMost(3000))
-            // Also check HTTPS RR ALPN h3 hint
+            val udp = QuicProbe.probe(target.host, 443, ctx.timeoutMs.toInt().coerceAtMost(3000))
             val rr = DnsHttpsRecordQuery().query(target.host)
-            val h3hint = rr.alpn.any { it.contains("h3", true) } || (rr.rawHint?.contains("h3") == true)
-            val signal = when {
-                r.reachable && h3hint ->
-                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "QUIC path + h3 hint")
-                r.reachable ->
-                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, r.detail)
-                else ->
-                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, r.detail)
+            val h3rr = rr.alpn.any { it.contains("h3", true) } || (rr.rawHint?.contains("h3") == true)
+            // Alt-Svc from HTTPS
+            var altSvc = ""
+            var h3Alt = false
+            try {
+                val client = SharedOkHttpFactory.get(ctx.timeoutMs)
+                val req = okhttp3.Request.Builder().url("https://${target.host}/")
+                    .header("User-Agent", "MrScannerOmega/2.2").head().build()
+                client.newCall(req).execute().use { resp ->
+                    altSvc = resp.header("alt-svc") ?: resp.header("Alt-Svc") ?: ""
+                    h3Alt = altSvc.contains("h3", true)
+                }
+            } catch (_: Exception) {}
+            @Suppress("UNCHECKED_CAST")
+            val headers = ctx.get<Map<String, List<String>>>("http.headers").orEmpty()
+            if (altSvc.isEmpty()) {
+                altSvc = headers.entries.find { it.key.equals("alt-svc", true) }?.value?.joinToString() ?: ""
+                h3Alt = h3Alt || altSvc.contains("h3", true)
             }
-            PluginResult(id, signal, "quic=${r.reachable} h3hint=$h3hint ${r.detail}",
-                mapOf("reachable" to r.reachable.toString(), "detail" to r.detail, "h3" to h3hint.toString()),
-                durationMs = System.currentTimeMillis() - t0)
+            val signal = when {
+                (udp.reachable && (h3rr || h3Alt)) ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE,
+                        "QUIC path + H3 advertisement (alt-svc/HTTPS RR)")
+                h3Alt || h3rr ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "H3 advertised")
+                udp.reachable ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, udp.detail)
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "no quic/h3 signal")
+            }
+            PluginResult(id, signal,
+                "udp=${udp.reachable} h3rr=$h3rr h3alt=$h3Alt",
+                mapOf(
+                    "udp" to udp.detail,
+                    "alt-svc" to altSvc.take(160),
+                    "h3rr" to h3rr.toString(),
+                    "h3alt" to h3Alt.toString()
+                ), durationMs = System.currentTimeMillis() - t0)
         }
     }
 }
@@ -966,12 +1019,30 @@ class CdnEdgePlugin : ScanPlugin {
 class TimeConsistencyPlugin : ScanPlugin {
     override val id = "plugin.host.timeconsistency"; override val displayName = "Time Consistency"
     override val evidenceClass: EvidenceClass? = null
-    override val cost = PluginCost(0, 0, 0)
+    override val cost = PluginCost(10, 0, 0)
     override val dependsOn = emptySet<String>()
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.WEAK, "metadata"),
-            "use reverify / WorkManager", mapOf("scheduled" to "false"), durationMs = System.currentTimeMillis() - t0)
+        val last = ctx.get<Long>("hole.lastConfirmedAt")
+        val prevVerdict = ctx.get<String>("hole.lastVerdict")
+        val ageMs = if (last != null) t0 - last else -1L
+        val summary = when {
+            last == null -> "no prior hole record — schedule reverify via WorkManager/reverify"
+            ageMs < 3_600_000 -> "recently confirmed ${ageMs / 1000}s ago verdict=$prevVerdict"
+            else -> "stale ${ageMs / 3_600_000}h ago verdict=$prevVerdict — reverify recommended"
+        }
+        return PluginResult(
+            id,
+            PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.WEAK, "temporal-metadata"),
+            summary,
+            mapOf(
+                "lastConfirmedAt" to (last?.toString() ?: ""),
+                "lastVerdict" to (prevVerdict ?: ""),
+                "ageMs" to ageMs.toString()
+            ),
+            durationMs = System.currentTimeMillis() - t0
+        )
     }
 }
+

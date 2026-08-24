@@ -37,7 +37,14 @@ object ZeroRatePacks {
                 ZeroRateCandidate("www.whatsapp.com", "/", true, listOf("whatsapp"), "messaging"),
                 ZeroRateCandidate("www.wikipedia.org", "/", true, listOf("wikipedia"), "edu zero-rate"),
                 ZeroRateCandidate("connectivitycheck.gstatic.com", "/generate_204", true, emptyList(), "captive portal probe"),
-                ZeroRateCandidate("captive.apple.com", "/hotspot-detect.html", true, listOf("Success", "HTML"), "apple captive")
+                ZeroRateCandidate("captive.apple.com", "/hotspot-detect.html", true, listOf("Success", "HTML"), "apple captive"),
+                ZeroRateCandidate("www.facebook.com", "/", true, listOf("facebook"), "www FB"),
+                ZeroRateCandidate("web.facebook.com", "/", true, listOf("facebook"), "web FB"),
+                ZeroRateCandidate("static.xx.fbcdn.net", "/", true, listOf(), "fbcdn"),
+                ZeroRateCandidate("www.messenger.com", "/", true, listOf("messenger","facebook"), "messenger"),
+                ZeroRateCandidate("telegram.org", "/", true, listOf("telegram"), "telegram"),
+                ZeroRateCandidate("www.youtube.com", "/", true, listOf("youtube","ytimg"), "youtube often bundled"),
+                ZeroRateCandidate("i.instagram.com", "/", true, listOf("instagram"), "ig api host")
             )
         ),
         ZeroRatePack(

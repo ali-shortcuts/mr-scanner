@@ -22,7 +22,7 @@ fun main(args: Array<String>) = runBlocking {
     val session = CliSession(settings)
     println("""
 +==================================================+
-|  Mr. Scanner Ω  v2.1.0-omega                     |
+|  Mr. Scanner Ω  v2.2.0-omega                     |
 |  ConfidenceEngineV3 · 41-plugin architecture     |
 |  Engine: Confidence v3 (symmetric log-odds)      |
 |  Creator: Mr Ali · t.me/Mr_Ali_2025              |
