@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -229,9 +230,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * About screen — architecture §9 fields exactly:
-     * Name, App ID, versions, creator, telegram, channel, email, socials, disclaimer,
-     * plus App Specs & Engine Info card.
+     * About screen — architecture §9 + Creator/Support with official icons.
+     * Every icon is fully clickable and opens the exact URL.
      */
     private fun showAbout() {
         val root = inflate(R.layout.fragment_about)
@@ -242,7 +242,6 @@ class MainActivity : AppCompatActivity() {
         root.findViewById<TextView>(R.id.aboutVersionLine).text =
             "v${BuildConfig.VERSION_NAME}  ·  versionCode ${BuildConfig.VERSION_CODE}"
 
-        // App Specs & Engine Info — exact lines from §9 after merge
         root.findViewById<TextView>(R.id.aboutSpecsBody).text = buildString {
             appendLine(getString(R.string.engine_info))
             appendLine(getString(R.string.engine_plugins))
@@ -260,18 +259,41 @@ class MainActivity : AppCompatActivity() {
             appendLine("minSdk 26 · targetSdk 34")
         }
 
-        root.findViewById<Button>(R.id.btnTelegram).setOnClickListener {
-            openUrl(getString(R.string.telegram_personal_url))
-        }
-        root.findViewById<Button>(R.id.btnChannel).setOnClickListener {
-            openUrl(getString(R.string.telegram_channel_url))
-        }
-        root.findViewById<Button>(R.id.btnEmail).setOnClickListener {
-            openUrl(getString(R.string.email_mailto))
-        }
-        root.findViewById<Button>(R.id.btnSocial).setOnClickListener {
-            openUrl(getString(R.string.facebook_url))
-        }
+        bindSocial(root.findViewById(R.id.linkEmail), R.drawable.ic_brand_email,
+            R.string.label_email, R.string.handle_email, R.string.url_email)
+        bindSocial(root.findViewById(R.id.linkTelegram), R.drawable.ic_brand_telegram,
+            R.string.label_telegram, R.string.handle_telegram, R.string.url_telegram)
+        bindSocial(root.findViewById(R.id.linkChannel), R.drawable.ic_brand_channel,
+            R.string.label_channel, R.string.handle_channel, R.string.url_channel)
+        bindSocial(root.findViewById(R.id.linkFacebook), R.drawable.ic_brand_facebook,
+            R.string.label_facebook, R.string.handle_facebook, R.string.url_facebook)
+        bindSocial(root.findViewById(R.id.linkTiktok), R.drawable.ic_brand_tiktok,
+            R.string.label_tiktok, R.string.handle_tiktok, R.string.url_tiktok)
+        bindSocial(root.findViewById(R.id.linkInstagram), R.drawable.ic_brand_instagram,
+            R.string.label_instagram, R.string.handle_instagram, R.string.url_instagram)
+        bindSocial(root.findViewById(R.id.linkYoutube), R.drawable.ic_brand_youtube,
+            R.string.label_youtube, R.string.handle_youtube, R.string.url_youtube)
+    }
+
+    private fun bindSocial(
+        cell: View,
+        iconRes: Int,
+        titleRes: Int,
+        handleRes: Int,
+        urlRes: Int
+    ) {
+        val icon = cell.findViewById<ImageView>(R.id.socialIcon)
+        val title = cell.findViewById<TextView>(R.id.socialTitle)
+        val handle = cell.findViewById<TextView>(R.id.socialHandle)
+        icon.setImageResource(iconRes)
+        title.setText(titleRes)
+        handle.setText(handleRes)
+        val url = getString(urlRes)
+        icon.contentDescription = getString(titleRes)
+        // Entire cell clickable
+        cell.isClickable = true
+        cell.isFocusable = true
+        cell.setOnClickListener { openUrl(url) }
     }
 
     /** §7.4 verdict chip colors */

@@ -128,14 +128,21 @@ QUIC/HTTP3 full path needs Cronet on device (`testQuic` flag). ECH is probe-leve
 
 ---
 
-## Author
+## Creator / Support
 
-**Mr Ali**
+**Powered by Mr Ali**
 
-- Telegram: [t.me/Mr_Ali_2025](https://t.me/Mr_Ali_2025)
-- Channel: [t.me/Ali_shortcuts](https://t.me/Ali_shortcuts)
-- Email: [ali.hekmati2026@gmail.com](mailto:ali.hekmati2026@gmail.com)
-- Social: Facebook `AliShortcuts` · TikTok/Instagram/YouTube: `ali_shortcuts`
+Created and developed by Mr Ali, an independent developer building practical digital tools, automation solutions, and useful projects. Follow the channels below for updates, new projects, and useful content.
+
+| | |
+|---|---|
+| **Email** | [Ali.hekmati2026@gmail.com](mailto:Ali.hekmati2026@gmail.com) |
+| **Telegram** | [t.me/Mr_Ali_2025](https://t.me/Mr_Ali_2025) |
+| **Telegram Channel** | [t.me/Ali_shortcuts](https://t.me/Ali_shortcuts) |
+| **Facebook** | [facebook.com/AliShortcuts](https://www.facebook.com/AliShortcuts) |
+| **TikTok** | [tiktok.com/@ali_shortcuts](https://www.tiktok.com/@ali_shortcuts) |
+| **Instagram** | [instagram.com/ali_shortcuts](https://www.instagram.com/ali_shortcuts) |
+| **YouTube** | [youtube.com/@Ali_Shortcuts](https://www.youtube.com/@Ali_Shortcuts) |
 
 
 ## License / ethics

@@ -59,3 +59,19 @@ adb install -r MrScannerOmega-2.0.0-universal.apk
 > Strictly for authorized security research, network audits, and code analysis.
 
 Canonical design: `docs/omega-master.md`
+
+## Creator / Support
+
+**Powered by Mr Ali**
+
+Created and developed by Mr Ali, an independent developer building practical digital tools, automation solutions, and useful projects.
+
+| Platform | URL |
+|---|---|
+| Email | mailto:Ali.hekmati2026@gmail.com |
+| Telegram | https://t.me/Mr_Ali_2025 |
+| Telegram Channel | https://t.me/Ali_shortcuts |
+| Facebook | https://www.facebook.com/AliShortcuts |
+| TikTok | https://www.tiktok.com/@ali_shortcuts |
+| Instagram | https://www.instagram.com/ali_shortcuts |
+| YouTube | https://www.youtube.com/@Ali_Shortcuts |
