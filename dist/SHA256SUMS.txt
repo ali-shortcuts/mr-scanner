@@ -1,0 +1,7 @@
+17191e917813b265108bbc42e161e1fda1c9a2a3f01824562eea5deda5dd0e69  MrScannerOmega-2.2.0-arm64-v8a.apk
+17191e917813b265108bbc42e161e1fda1c9a2a3f01824562eea5deda5dd0e69  MrScannerOmega-2.2.0-armeabi-v7a.apk
+17191e917813b265108bbc42e161e1fda1c9a2a3f01824562eea5deda5dd0e69  MrScannerOmega-2.2.0-universal.apk
+17191e917813b265108bbc42e161e1fda1c9a2a3f01824562eea5deda5dd0e69  MrScannerOmega-2.2.0.apk
+698e5aec261088eb78011ce5394df778d150c167b14bab4242eb7c1302d50628  mr-scanner-omega-2.2.0-source.tar.gz
+1c67ca2af3e8ad07b3def58522d4b785ef2c729a6ebf5e650e20bf3adccdd594  mr-scanner-omega-2.2.0-source.zip
+6fac2083e04c87c541f507223040e722712d3a1b7f220e969d29b7de3918b1b4  SPECS.md

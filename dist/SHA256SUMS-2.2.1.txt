@@ -1,0 +1,4 @@
+580d49734757149bbce96f814f23031a703f0edf2927c11dc89efe1e9b7dbb1d  MrScannerOmega-2.2.1-hotfix-arm64-v8a.apk
+580d49734757149bbce96f814f23031a703f0edf2927c11dc89efe1e9b7dbb1d  MrScannerOmega-2.2.1-hotfix-armeabi-v7a.apk
+580d49734757149bbce96f814f23031a703f0edf2927c11dc89efe1e9b7dbb1d  MrScannerOmega-2.2.1-hotfix-universal.apk
+580d49734757149bbce96f814f23031a703f0edf2927c11dc89efe1e9b7dbb1d  MrScannerOmega-2.2.1-hotfix.apk

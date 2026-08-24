@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mr. Scanner Ω</string>
+    <string name="app_name_full">Mr. Scanner Ω</string>
+    <string name="creator_name">Mr Ali</string>
+    <string name="powered_by">Powered by Mr Ali</string>
+    <string name="creator_support_title">Creator / Support</string>
+
+    <!-- Exact URLs — do not change -->
+    <string name="url_email">mailto:Ali.hekmati2026@gmail.com</string>
+    <string name="url_telegram">https://t.me/Mr_Ali_2025</string>
+    <string name="url_channel">https://t.me/Ali_shortcuts</string>
+    <string name="url_facebook">https://www.facebook.com/AliShortcuts</string>
+    <string name="url_tiktok">https://www.tiktok.com/@ali_shortcuts</string>
+    <string name="url_instagram">https://www.instagram.com/ali_shortcuts</string>
+    <string name="url_youtube">https://www.youtube.com/@Ali_Shortcuts</string>
+
+    <string name="label_email">Email</string>
+    <string name="label_telegram">Telegram</string>
+    <string name="label_channel">Channel</string>
+    <string name="label_facebook">Facebook</string>
+    <string name="label_tiktok">TikTok</string>
+    <string name="label_instagram">Instagram</string>
+    <string name="label_youtube">YouTube</string>
+
+    <string name="handle_email">Ali.hekmati2026@gmail.com</string>
+    <string name="handle_telegram">@Mr_Ali_2025</string>
+    <string name="handle_channel">@Ali_shortcuts</string>
+    <string name="handle_facebook">AliShortcuts</string>
+    <string name="handle_tiktok">@ali_shortcuts</string>
+    <string name="handle_instagram">@ali_shortcuts</string>
+    <string name="handle_youtube">@Ali_Shortcuts</string>
+
+    <string name="creator_bio">Created and developed by Mr Ali, an independent developer building practical digital tools, automation solutions, and useful projects. Follow the channels above for updates, new projects, and useful content.</string>
+
+    <string name="disclaimer">Strictly for authorized security research, network audits, and code analysis.</string>
+    <string name="disclaimer_long">Strictly for authorized security research, network audits, and code analysis. Unauthorized scanning of networks you do not own or have permission to test may be illegal.</string>
+    <string name="engine_info">Engine: Confidence v3 (symmetric log-odds)</string>
+    <string name="engine_plugins">Plugins: 41 (22 base + 9 bypass + 10 advanced)</string>
+    <string name="engine_transport">Transport: OkHttp + optional Cronet H3</string>
+    <string name="architecture_version">Architecture: Ω-2.0.0-FINAL</string>
+    <string name="scan_channel_name">Scan progress</string>
+    <string name="scan_channel_desc">Foreground scan status</string>
+    <string name="about_title">About</string>
+    <string name="app_specs_title">App Specs &amp; Engine Info</string>
+    <string name="creator_title">Creator</string>
+    <string name="warning_title">Warning</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_scan">Scan</string>
+    <string name="tab_apk">APK</string>
+    <string name="tab_term">Term</string>
+    <string name="tab_about">About</string>
+    <string name="subtitle_default">ConfidenceEngineV3 · 41 plugins</string>
+</resources>

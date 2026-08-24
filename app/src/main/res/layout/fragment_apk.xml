@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/omega_bg"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="APK Static Analyzer"
+        android:textColor="@color/omega_on_bg"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Pick an APK to analyze permissions, native ABIs, cert meta, dangerous API strings."
+        android:textColor="@color/omega_muted"
+        android:textSize="12sp" />
+
+    <Button
+        android:id="@+id/btnPickApk"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_primary"
+        android:text="Choose APK file"
+        android:textAllCaps="false"
+        android:textColor="@color/omega_on_bg" />
+
+    <TextView
+        android:id="@+id/apkPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="monospace"
+        android:text="No file selected"
+        android:textColor="@color/omega_secondary"
+        android:textSize="11sp" />
+
+    <Button
+        android:id="@+id/btnAnalyzeApk"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_tab_inactive"
+        android:enabled="false"
+        android:text="Analyze"
+        android:textAllCaps="false"
+        android:textColor="@color/omega_on_bg" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/apkReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:textColor="@color/omega_on_bg"
+            android:textSize="11sp" />
+    </ScrollView>
+</LinearLayout>
