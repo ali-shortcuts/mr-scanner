@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#070B14"
+    android:orientation="vertical" android:padding="8dp">
+    <ScrollView android:id="@+id/termScroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <TextView android:id="@+id/termOut" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:fontFamily="monospace" android:text="mr-scanner Omega terminal — type help\n"
+            android:textColor="#E8F1FF" android:textIsSelectable="true" android:textSize="11sp"/>
+    </ScrollView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <EditText android:id="@+id/termIn" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:background="#121A2F" android:fontFamily="monospace" android:hint="fullscan example.com --confidence"
+            android:imeOptions="actionSend" android:inputType="text" android:padding="10dp"
+            android:textColor="#E8F1FF" android:textColorHint="#556677" android:textSize="12sp"/>
+        <Button android:id="@+id/btnRun" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="6dp" android:backgroundTint="#5B8CFF" android:text="Run" android:textAllCaps="false"/>
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Mr. Scanner Omega" android:textColor="#E8F1FF" android:textSize="22sp" android:textStyle="bold"/>
+        <TextView android:id="@+id/aboutBody" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:fontFamily="monospace" android:lineSpacingExtra="4dp"
+            android:textColor="#B0B8C8" android:textSize="12sp"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"
+            android:text="@string/disclaimer" android:textColor="#889" android:textSize="11sp"/>
+    </LinearLayout>
+</ScrollView>

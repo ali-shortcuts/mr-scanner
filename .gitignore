@@ -1,0 +1,15 @@
+.gradle/
+build/
+**/build/
+.idea/
+*.iml
+local.properties
+release.jks
+keystore.properties
+.env
+.DS_Store
+.cxx/
+captures/
+*.hprof
+.mr-scanner-omega/
+*.log

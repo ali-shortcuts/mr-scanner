@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Quick fullscan" android:textColor="#E8F1FF" android:textSize="18sp" android:textStyle="bold"/>
+        <TextView android:id="@+id/profileLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textColor="#9AD1FF" android:textSize="12sp"/>
+        <EditText android:id="@+id/hostInput" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:background="#121A2F" android:hint="example.com"
+            android:inputType="textUri" android:padding="14dp" android:text="example.com"
+            android:textColor="#E8F1FF" android:textColorHint="#667788"/>
+        <Button android:id="@+id/btnScan" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:backgroundTint="#5B8CFF" android:text="Run fullscan" android:textAllCaps="false"/>
+        <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+            android:indeterminate="true" android:visibility="gone"/>
+        <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:text="Idle — authorized research only" android:textColor="#B0B8C8" android:textSize="12sp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:background="#121A2F" android:orientation="vertical" android:padding="16dp">
+            <TextView android:id="@+id/verdict" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="—" android:textColor="#B0B8C8" android:textSize="16sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/confidence" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:fontFamily="monospace" android:textColor="#E8F1FF" android:textSize="13sp"/>
+            <TextView android:id="@+id/explanation" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:fontFamily="monospace" android:textColor="#8A93A6" android:textSize="11sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"
+            android:text="@string/disclaimer" android:textColor="#667085" android:textSize="11sp"/>
+    </LinearLayout>
+</ScrollView>

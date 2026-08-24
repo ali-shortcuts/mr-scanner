@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#0B1020" android:orientation="vertical">
+    <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:padding="14dp" android:text="Mr Scanner Omega"
+        android:textColor="#E8F1FF" android:textSize="18sp" android:textStyle="bold"/>
+    <TextView android:id="@+id/subtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:paddingBottom="8dp" android:paddingStart="14dp" android:paddingEnd="14dp"
+        android:text="ConfidenceEngineV3 · 41 plugins" android:textColor="#9AD1FF" android:textSize="12sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:orientation="horizontal" android:padding="4dp">
+        <Button android:id="@+id/tabHome" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+            android:backgroundTint="#5B8CFF" android:text="Home" android:textAllCaps="false" android:textSize="12sp"/>
+        <Button android:id="@+id/tabScan" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+            android:layout_marginStart="4dp" android:backgroundTint="#2A3550" android:text="Scan" android:textAllCaps="false" android:textSize="12sp"/>
+        <Button android:id="@+id/tabTerm" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+            android:layout_marginStart="4dp" android:backgroundTint="#2A3550" android:text="Term" android:textAllCaps="false" android:textSize="12sp"/>
+        <Button android:id="@+id/tabAbout" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+            android:layout_marginStart="4dp" android:backgroundTint="#2A3550" android:text="About" android:textAllCaps="false" android:textSize="12sp"/>
+    </LinearLayout>
+    <FrameLayout android:id="@+id/content" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+</LinearLayout>

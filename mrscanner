@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+BIN="$ROOT/cli/build/install/mrscanner/bin/mrscanner"
+if [[ ! -x "$BIN" ]]; then
+  (cd "$ROOT" && ./gradlew :cli:installDist --quiet --no-daemon)
+fi
+exec "$BIN" "$@"

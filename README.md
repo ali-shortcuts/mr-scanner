@@ -1,0 +1,142 @@
+# Mr Scanner Ω
+
+**Powerful mobile-class network scanner** — ConfidenceEngineV3 · 41-plugin DAG · DPI/bypass research tooling.
+
+> Strictly for **authorized** security research, network audits, and code analysis.  
+> Unauthorized scanning of networks you do not own or have permission to test may be illegal.
+
+| | |
+|---|---|
+| Package | `com.mrscanner.omega` |
+| Version | **2.0.0-omega** |
+| Engine | Confidence v3 (symmetric log-odds) |
+| Plugins | **41 catalog · 37 active by default** |
+| minSdk / targetSdk | 26 / 34 |
+
+---
+
+## Download APK
+
+Prebuilt sideload APK:
+
+- [`dist/MrScannerOmega-2.0.0.apk`](dist/MrScannerOmega-2.0.0.apk)
+
+```bash
+adb install -r dist/MrScannerOmega-2.0.0.apk
+```
+
+Or open the APK on the device (allow unknown sources).  
+SHA256: see [`dist/SHA256SUMS.txt`](dist/SHA256SUMS.txt).
+
+---
+
+## What's inside
+
+| Module | Role |
+|---|---|
+| `:core` | Pure Kotlin engine — plugins, DAG, ConfidenceEngineV3, CLI, export, hole-age, metrics |
+| `:cli` | Desktop `mrscanner` REPL / one-shot commands |
+| `:app` | Android UI — Home · Bulk Scan · Terminal · About |
+
+### Architecture (canonical)
+Full design doc: [`docs/omega-master.md`](docs/omega-master.md)
+
+Highlights:
+- **ConfidenceEngineV3** — SUPPORTS / REFUTES / ABSTAIN + log-odds; symmetric `CONFIRMED_CANDIDATE` ↔ `CONFIRMED_NOT_VULNERABLE`
+- **PluginDagExecutor** + **BudgetGuard** (network-profile aware)
+- P0: `dnsconsistency`, `recordfragment`, `snisan` (SAN-aware SNI exploitability)
+- Bypass family: TLS fragment, SNI fronting/spoof, DoH, zero-rate (cellular), CVE lite, …
+- Checkpoint / hole-age persistence · JSON export schema v1 · EventBus · selftest
+
+### Android tabs
+1. **Home** — one-host fullscan + verdict card  
+2. **Scan** — multi-host bulk scan with live progress  
+3. **Term** — full in-app CLI  
+4. **About** — engine specs, contacts, disclaimer  
+
+---
+
+## Build
+
+### Requirements
+- JDK **17+**
+- Android SDK **34** (for APK)
+- Gradle wrapper included
+
+```bash
+# CLI + tests (no Android SDK required)
+./gradlew :core:test :cli:installDist
+
+./mrscanner selftest
+./mrscanner fullscan example.com --confidence
+./mrscanner help
+
+# Android APK
+echo "sdk.dir=$ANDROID_HOME" > local.properties
+./gradlew :app:assembleRelease
+# → app/build/outputs/apk/release/app-release.apk
+```
+
+### Useful CLI commands
+
+| Command | Purpose |
+|---|---|
+| `fullscan <host\|file>` | Full DAG + confidence |
+| `fragment <host>` | tlsfragment + recordfragment |
+| `sni --target=` | fronting + SAN |
+| `selftest` | Engine fixtures + live soft checks |
+| `export <id>` | JSON schema v1 |
+| `holes` / `checkpoint` | Persistence |
+| `cidr a.b.c.0/24` | Bulk ≤/24 |
+| `set key=value` | Live settings |
+| `plugins` | Catalog |
+
+---
+
+## Tests
+
+```bash
+./gradlew :core:test
+```
+
+Unit coverage includes ConfidenceEngineV3 truth table, SAN/wildcard match, DAG topology + dead-host short-circuit.
+
+---
+
+## GitHub Actions
+
+- **CI** (`.github/workflows/ci.yml`) — core tests + CLI on every push  
+- **Release** (`.github/workflows/release.yml`) — on tag `v*`, builds APK + CLI zip  
+
+Optional secrets for signed release: `RELEASE_KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+
+```bash
+git tag v2.0.0-omega
+git push origin v2.0.0-omega
+```
+
+---
+
+## Limits (honest)
+
+No raw SYN / masscan-class pps on non-root Android. This tool is **I/O-bound** on cellular RTT.  
+See [`docs/LIMITS.md`](docs/LIMITS.md).
+
+QUIC/HTTP3 full path needs Cronet on device (`testQuic` flag). ECH is probe-level. Zero-rating needs operator packs on cellular.
+
+---
+
+## Author
+
+**Mr Ali**  
+- Telegram: [t.me/Mr_Ali_2025](https://t.me/Mr_Ali_2025)  
+- Channel: [t.me/Ali_shortcuts](https://t.me/Ali_shortcuts)  
+- Email: ali.hekmati2026@gmail.com  
+- Social: Facebook `AliShortcuts` · TikTok/IG/YT `ali_shortcuts`
+
+---
+
+## License / ethics
+
+Use only on systems you own or are explicitly authorized to test.  
+This software is provided for defensive security research and authorized network audits.

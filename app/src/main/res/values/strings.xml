@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mr Scanner Omega</string>
+    <string name="disclaimer">Strictly for authorized security research, network audits, and code analysis. Unauthorized scanning may be illegal.</string>
+    <string name="engine_info">Engine: Confidence v3 (symmetric log-odds) · Plugins: 41</string>
+    <string name="scan_channel_name">Scan progress</string>
+    <string name="scan_channel_desc">Foreground scan status</string>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MrScannerOmega" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#5B8CFF</item>
+        <item name="colorPrimaryDark">#0B1020</item>
+        <item name="colorAccent">#5B8CFF</item>
+        <item name="android:statusBarColor">#0B1020</item>
+        <item name="android:navigationBarColor">#0B1020</item>
+        <item name="android:windowBackground">#0B1020</item>
+        <item name="android:textColorPrimary">#E8F1FF</item>
+    </style>
+</resources>
