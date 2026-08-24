@@ -64,7 +64,7 @@ Canonical design: `docs/omega-master.md`
 
 **Powered by Mr Ali**
 
-Created and developed by Mr Ali, an independent developer building practical digital tools, automation solutions, and useful projects.
+Created and developed by Mr Ali, an independent developer building practical digital tools, automation solutions, and useful projects. Follow the channels above for updates, new projects, and useful content.
 
 | Platform | URL |
 |---|---|
@@ -75,3 +75,4 @@ Created and developed by Mr Ali, an independent developer building practical dig
 | TikTok | https://www.tiktok.com/@ali_shortcuts |
 | Instagram | https://www.instagram.com/ali_shortcuts |
 | YouTube | https://www.youtube.com/@Ali_Shortcuts |
+

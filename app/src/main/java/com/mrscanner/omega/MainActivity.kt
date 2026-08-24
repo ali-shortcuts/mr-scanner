@@ -82,8 +82,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun openUrl(url: String) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (_: Exception) { /* no browser */ }
+            val uri = Uri.parse(url)
+            val intent = if (url.startsWith("mailto:", ignoreCase = true)) {
+                Intent(Intent.ACTION_SENDTO).apply {
+                    data = uri
+                }
+            } else {
+                Intent(Intent.ACTION_VIEW, uri)
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (_: Exception) {
+            // No handler (browser/mail) installed — fail silently
+        }
     }
 
     private fun showHome() {
