@@ -11,10 +11,10 @@ android {
         applicationId = "com.mrscanner.omega"
         minSdk = 26
         targetSdk = 34
-        versionCode = 200
-        versionName = "2.0.0-omega"
+        versionCode = 210
+        versionName = "2.1.0-omega"
         buildConfigField("String", "ENGINE", "\"confidence-v3\"")
-        buildConfigField("int", "PLUGIN_CATALOG_SIZE", "41")
+        buildConfigField("int", "PLUGIN_CATALOG_SIZE", "42")
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }

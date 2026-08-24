@@ -1,5 +1,6 @@
 package com.mrscanner.omega.core.scheduler
 import com.mrscanner.omega.core.db.*
+import com.mrscanner.omega.core.db.OmegaDatabase
 import com.mrscanner.omega.core.eventbus.*
 import com.mrscanner.omega.core.export.ResultJsonCodec
 import com.mrscanner.omega.core.intelligence.ConfidenceEngineV3
@@ -22,8 +23,19 @@ class ScanEngine(
     val holeStore: HoleAgeStore = HoleAgeStore(),
     val checkpointStore: CheckpointStore = CheckpointStore(),
     val history: ScanHistoryStore = ScanHistoryStore(),
-    var profile: NetworkProfile = NetworkProfile.UNKNOWN
+    var profile: NetworkProfile = NetworkProfile.UNKNOWN,
+    val database: OmegaDatabase? = null
 ) {
+    private fun applyHole(host: String, verdict: com.mrscanner.omega.core.plugin.Verdict, conf: Double) {
+        if (database != null) database.holes.applyVerdict(host, verdict, conf)
+        else holeStore.applyVerdict(host, verdict, conf)
+    }
+    private fun saveCheckpoint(cp: com.mrscanner.omega.core.model.CheckpointRecord) {
+        if (database != null) database.checkpoints.save(cp) else checkpointStore.save(cp)
+    }
+    private fun loadCheckpoint(id: String) =
+        if (database != null) database.checkpoints.get(id) else checkpointStore.get(id)
+
     suspend fun scanHosts(hosts: List<String>, scanId: String = UUID.randomUUID().toString().take(8), resume: Boolean = false): List<HostScanResult> {
         val t0 = System.currentTimeMillis()
         val startedAt = Instant.now().toString()
@@ -31,7 +43,7 @@ class ScanEngine(
         var startIndex = 0
         val completed = mutableListOf<String>()
         if (resume) {
-            val cp = checkpointStore.get(scanId)
+            val cp = loadCheckpoint(scanId)
             if (cp != null) {
                 if (cp.configHash != configHash) {
                     eventBus.emit(ScanEvent.LogEmitted("ERROR", "config drift — refuse resume"))
@@ -56,7 +68,7 @@ class ScanEngine(
                     sem.withPermit {
                         val result = scanOne(host, dag)
                         synchronized(lock) { results += result; completed += host }
-                        holeStore.applyVerdict(host, result.report.verdict, result.report.confidence)
+                        applyHole(host, result.report.verdict, result.report.confidence)
                         eventBus.emit(ScanEvent.HostVerdict(host, result.report,
                             result.pluginResults.filter { it.signal.polarity != SignalPolarity.ABSTAIN }
                                 .map { "${it.pluginId.substringAfterLast('.')}: ${it.summary}" }))
@@ -64,7 +76,7 @@ class ScanEngine(
                         eventBus.emit(ScanEvent.Progress(n, hosts.size, host))
                         if (n % settings.checkpointEveryNHosts == 0 || n == hosts.size) {
                             val cp = CheckpointRecord(scanId, configHash = configHash, cursorIndex = completed.size, totalHosts = hosts.size, completedHosts = completed.toMutableList())
-                            checkpointStore.save(cp)
+                            saveCheckpoint(cp)
                             eventBus.emit(ScanEvent.CheckpointSaved(scanId, cp.cursorIndex))
                         }
                         result

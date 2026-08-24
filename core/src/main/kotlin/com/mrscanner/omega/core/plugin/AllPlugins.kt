@@ -421,10 +421,11 @@ class FingerprintPlugin : ScanPlugin {
 
 /* ========== BYPASS (9) ========== */
 
+
 class TlsFragmentationPlugin : ScanPlugin {
     override val id = "tlsfragment"; override val displayName = "TLS Fragmentation"
     override val evidenceClass = EvidenceClass.DEFINITIVE
-    override val cost = PluginCost(2000, 12000, 2)
+    override val cost = PluginCost(2500, 16000, 2)
     override val dependsOn = setOf("tcpconnect", "tls")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
@@ -432,20 +433,33 @@ class TlsFragmentationPlugin : ScanPlugin {
         return PluginHelpers.safeScan(id, EvidenceClass.DEFINITIVE, t0) {
             ctx.ensureActive()
             val probe = TlsProbe(ctx.timeoutMs.toInt())
-            val normal = ctx.get<TlsProbeResult>("tls.probe") ?: probe.probe(target)
-            val frag = probe.probe(target, 2)
+            val normal = ctx.get<TlsProbeResult>("tls.probe") ?: probe.probe(target, null)
+            // Real record fragmentation at 2 bytes into ClientHello
+            val frag = probe.probe(target, fragmentAt = 2)
+            ctx.put("tls.frag.basic", frag)
+            if (frag.clientHello.isNotEmpty()) ctx.put("tls.clientHello", frag.clientHello)
+            if (frag.ja3 != null) ctx.put("ja3self", frag.ja3)
             val signal = when {
-                !normal.success && frag.success -> PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.DEFINITIVE, "frag works")
-                normal.success && frag.success -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both ok")
-                normal.success && !frag.success -> PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.STRONG, "frag fails")
-                else -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both fail")
+                !normal.success && frag.success ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.DEFINITIVE, "fragmented ClientHello works, normal fails")
+                normal.success && frag.success ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both ok — frag not required")
+                normal.success && !frag.success ->
+                    PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.STRONG, "frag fails while normal ok")
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both fail mode=${frag.mode}")
             }
-            PluginResult(id, signal, "normal=${normal.success} frag=${frag.success}",
-                mapOf("normal" to normal.toShortString(), "frag" to frag.toShortString()),
-                durationMs = System.currentTimeMillis() - t0)
+            PluginResult(id, signal, "normal=${normal.success} frag=${frag.success} mode=${frag.mode}",
+                mapOf(
+                    "normal" to normal.toShortString(),
+                    "frag" to frag.toShortString(),
+                    "ja3" to (frag.ja3 ?: ""),
+                    "helloBytes" to frag.clientHello.size.toString()
+                ), durationMs = System.currentTimeMillis() - t0)
         }
     }
 }
+
 
 class SniSpoofingPlugin : ScanPlugin {
     override val id = "snispoofing"; override val displayName = "SNI Spoof"
@@ -507,44 +521,139 @@ class DohBypassPlugin : ScanPlugin {
     }
 }
 
-class ZeroRatedPlugin : ScanPlugin {
+
+class ZeroRatedPlugin(
+    private val operatorHint: () -> String? = { null }
+) : ScanPlugin {
     override val id = "zerorated"; override val displayName = "Zero-Rated"
     override val evidenceClass = EvidenceClass.STRONG
-    override val cost = PluginCost(800, 4000, 1)
+    override val cost = PluginCost(4000, 32000, 4)
     override val dependsOn = setOf("https")
     override val requiredProfile = setOf(NetworkProfile.CELLULAR_METERED)
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.STRONG, "needs operator pack"),
-            "cellular — operator pack not loaded", mapOf("profile" to ctx.profile.name), durationMs = System.currentTimeMillis() - t0)
+        return PluginHelpers.safeScan(id, EvidenceClass.STRONG, t0) {
+            ctx.ensureActive()
+            val pack = ZeroRatePacks.forOperator(operatorHint() ?: ctx.get("operator") ?: "af")
+            val hits = ZeroRateProbe.probePack(pack, ctx.timeoutMs.toInt().coerceAtMost(5000))
+            ctx.put("zerorate.hits", hits)
+            val ok = hits.filter { it.ok && it.markerHit }
+            val signal = when {
+                ok.size >= 2 ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG,
+                        "zero-rate pack ${pack.id}: ${ok.size} candidates reachable")
+                ok.size == 1 ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE,
+                        "single zero-rate candidate: ${ok.first().candidate.host}")
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.STRONG,
+                        "pack ${pack.id}: no zero-rate hits (${hits.count { it.ok }}/${hits.size} reachable)")
+            }
+            PluginResult(id, signal,
+                "pack=${pack.id} hits=${ok.size}/${hits.size}",
+                mapOf(
+                    "pack" to pack.id,
+                    "ok" to ok.joinToString { it.candidate.host },
+                    "detail" to hits.joinToString { "${it.candidate.host}:${it.code}:${it.ok}" }
+                ), durationMs = System.currentTimeMillis() - t0)
+        }
     }
 }
+
+
 
 class PayloadInjectionPlugin : ScanPlugin {
     override val id = "payloadinjection"; override val displayName = "Payload Injection"
     override val evidenceClass = EvidenceClass.MODERATE
-    override val cost = PluginCost(100, 0, 0)
+    override val cost = PluginCost(2000, 8192, 2)
     override val dependsOn = setOf("https")
     override val requiredProfile = emptySet<NetworkProfile>()
+    /** Safe lab payloads — reflection / smuggling *detection* only, not exploitation. */
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "passive"),
-            "passive — no attack payloads by policy", mapOf("mode" to "passive"), durationMs = System.currentTimeMillis() - t0)
+        return PluginHelpers.safeScan(id, EvidenceClass.MODERATE, t0) {
+            ctx.ensureActive()
+            val client = SharedOkHttpFactory.get(ctx.timeoutMs)
+            val canary = "omega${System.nanoTime() % 100000}"
+            val probes = listOf(
+                "/?q=$canary",
+                "/$canary",
+                "/index.html%00$canary"
+            )
+            var reflected = false
+            var oddCode = false
+            val details = mutableMapOf<String, String>()
+            for (path in probes) {
+                try {
+                    val req = okhttp3.Request.Builder()
+                        .url("https://${target.host}$path")
+                        .header("User-Agent", "MrScannerOmega/2.0")
+                        .get().build()
+                    client.newCall(req).execute().use { resp ->
+                        val body = resp.body?.string()?.take(4000).orEmpty()
+                        details[path] = "code=${resp.code} len=${body.length}"
+                        if (body.contains(canary)) reflected = true
+                        if (resp.code in listOf(400, 500, 502) && path.contains("%00")) oddCode = true
+                    }
+                } catch (e: Exception) {
+                    details[path] = "err=${e.message}"
+                }
+            }
+            val signal = when {
+                reflected -> PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "query canary reflected")
+                oddCode -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "odd codes on encoded path")
+                else -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "no reflection")
+            }
+            PluginResult(id, signal, "reflected=$reflected odd=$oddCode", details,
+                durationMs = System.currentTimeMillis() - t0)
+        }
     }
 }
+
+
 
 class HeaderInjectionPlugin : ScanPlugin {
     override val id = "headerinjection"; override val displayName = "Header Injection"
     override val evidenceClass = EvidenceClass.MODERATE
-    override val cost = PluginCost(100, 0, 0)
+    override val cost = PluginCost(1800, 8192, 2)
     override val dependsOn = setOf("https")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "passive"),
-            "passive — authorized labs only", mapOf("mode" to "passive"), durationMs = System.currentTimeMillis() - t0)
+        return PluginHelpers.safeScan(id, EvidenceClass.MODERATE, t0) {
+            ctx.ensureActive()
+            val client = SharedOkHttpFactory.get(ctx.timeoutMs)
+            val canary = "omega-hdr-${System.nanoTime() % 99999}"
+            // CRLF / hop-by-hop / smuggling *probes* (safe)
+            val headerSets = listOf(
+                mapOf("X-Forwarded-For" to "127.0.0.1", "X-Omega-Canary" to canary),
+                mapOf("X-Original-URL" to "/$canary", "X-Rewrite-URL" to "/$canary"),
+                mapOf("Forwarded" to "for=127.0.0.1;host=${target.host}")
+            )
+            var interesting = false
+            val details = mutableMapOf<String, String>()
+            headerSets.forEachIndexed { idx, headers ->
+                try {
+                    val b = okhttp3.Request.Builder().url("https://${target.host}/").header("User-Agent", "MrScannerOmega/2.0")
+                    headers.forEach { (k, v) -> b.header(k, v) }
+                    client.newCall(b.get().build()).execute().use { resp ->
+                        val body = resp.body?.string()?.take(3000).orEmpty()
+                        val hit = body.contains(canary) || resp.headers.names().any { it.contains("omega", true) }
+                        if (hit) interesting = true
+                        details["set$idx"] = "code=${resp.code} hit=$hit"
+                    }
+                } catch (e: Exception) {
+                    details["set$idx"] = "err=${e.message}"
+                }
+            }
+            val signal = if (interesting)
+                PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "header influence/reflection")
+            else PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "no header influence")
+            PluginResult(id, signal, "interesting=$interesting", details, durationMs = System.currentTimeMillis() - t0)
+        }
     }
 }
+
 
 class MisconfigPlugin : ScanPlugin {
     override val id = "misconfig"; override val displayName = "Misconfig"
@@ -562,58 +671,103 @@ class MisconfigPlugin : ScanPlugin {
     }
 }
 
+
 class CveAuditPlugin : ScanPlugin {
     override val id = "cveaudit"; override val displayName = "CVE Audit"
     override val evidenceClass = EvidenceClass.STRONG
-    override val cost = PluginCost(50, 0, 0)
-    override val dependsOn = setOf("server", "fingerprint")
+    override val cost = PluginCost(80, 0, 0)
+    override val dependsOn = setOf("server", "fingerprint", "certificate")
     override val requiredProfile = emptySet<NetworkProfile>()
+    private val rules = listOf(
+        Rule("legacy-apache-2.2", "HIGH", Regex("apache/2\\.2", RegexOption.IGNORE_CASE), "Apache 2.2.x end-of-life"),
+        Rule("legacy-apache-2.4.49", "CRITICAL", Regex("apache/2\\.4\\.(49|50)", RegexOption.IGNORE_CASE), "Apache path traversal era"),
+        Rule("legacy-nginx-1.0", "HIGH", Regex("nginx/1\\.[0-9]\\.", RegexOption.IGNORE_CASE), "Very old nginx"),
+        Rule("openssl-1.0.1", "CRITICAL", Regex("openssl/1\\.0\\.1", RegexOption.IGNORE_CASE), "OpenSSL 1.0.1 (Heartbleed era)"),
+        Rule("openssl-1.0.2", "HIGH", Regex("openssl/1\\.0\\.2", RegexOption.IGNORE_CASE), "OpenSSL 1.0.2 EOL"),
+        Rule("iis-6", "HIGH", Regex("iis/6\\.", RegexOption.IGNORE_CASE), "IIS 6 legacy"),
+        Rule("php-5", "HIGH", Regex("php/5\\.", RegexOption.IGNORE_CASE), "PHP 5 EOL"),
+        Rule("openssh-7.2", "MEDIUM", Regex("openssh_7\\.2", RegexOption.IGNORE_CASE), "OpenSSH 7.2 known issues"),
+        Rule("exim-4.8", "HIGH", Regex("exim 4\\.8", RegexOption.IGNORE_CASE), "Old Exim"),
+        Rule("jquery-1.", "MEDIUM", Regex("jquery-1\\.|jquery/1\\.", RegexOption.IGNORE_CASE), "Old jQuery 1.x")
+    )
+    data class Rule(val id: String, val sev: String, val re: Regex, val title: String)
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
         val server = (ctx.get<String>("http.server") ?: "").lowercase()
-        val hits = mutableListOf<String>()
-        if (server.contains("apache/2.2")) hits += "legacy-apache-2.2"
-        if (server.contains("openssl/1.0.1")) hits += "legacy-openssl-1.0.1"
-        val signal = if (hits.isNotEmpty()) PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG, hits.joinToString())
-        else PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.STRONG, "no offline CVE hit")
-        return PluginResult(id, signal, if (hits.isEmpty()) "no offline CVE hits" else "hits=${hits.joinToString()}",
-            mapOf("hits" to hits.joinToString()), durationMs = System.currentTimeMillis() - t0)
+        val banner = (ctx.get<String>("http.server") ?: "") + " " + (ctx.get<List<String>>("tech.tags")?.joinToString() ?: "")
+        @Suppress("UNCHECKED_CAST")
+        val headers = ctx.get<Map<String, List<String>>>("http.headers").orEmpty()
+        val blob = (server + " " + banner + " " + headers.entries.joinToString { it.value.joinToString() }).lowercase()
+        val hits = rules.filter { it.re.containsMatchIn(blob) }
+        val signal = when {
+            hits.any { it.sev == "CRITICAL" } ->
+                PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG, hits.joinToString { it.id })
+            hits.any { it.sev == "HIGH" } ->
+                PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG, hits.joinToString { it.id })
+            hits.isNotEmpty() ->
+                PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, hits.joinToString { it.id })
+            else ->
+                PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.STRONG, "no offline CVE hit")
+        }
+        return PluginResult(id, signal,
+            if (hits.isEmpty()) "no offline CVE hits" else "hits=${hits.joinToString { it.id }}",
+            mapOf("hits" to hits.joinToString { "${it.sev}:${it.id}" }, "server" to server),
+            durationMs = System.currentTimeMillis() - t0)
     }
 }
 
-/* ========== ADVANCED (10) ========== */
 
 class DnsConsistencyPlugin(private val multi: MultiResolverDns = MultiResolverDns()) : ScanPlugin {
     override val id = "plugin.host.dnsconsistency"; override val displayName = "DNS Consistency"
     override val evidenceClass = EvidenceClass.STRONG
-    override val cost = PluginCost(200, 2048, 0)
+    override val cost = PluginCost(1200, 4096, 0)
     override val dependsOn = setOf("dns", "dnsmulti")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
         return PluginHelpers.safeScan(id, EvidenceClass.STRONG, t0) {
             ctx.ensureActive()
-            @Suppress("UNCHECKED_CAST")
-            val answers = ctx.get<Map<String, List<InetAddress>>>("dns.answers") ?: multi.lookupAll(target.host)
-            if (answers.isEmpty()) return@safeScan PluginHelpers.abstain(id, "no answers", t0, EvidenceClass.STRONG)
-            val sets = answers.values.map { it.mapNotNull { a -> a.hostAddress }.toSet() }
-            if (sets.all { it.isEmpty() }) return@safeScan PluginHelpers.abstain(id, "all empty", t0, EvidenceClass.STRONG)
+            val answers = multi.lookupAnswers(target.host)
+            ctx.put("dns.answerDetails", answers)
+            // also store InetAddress map for dependents
+            val map = answers.associate { a ->
+                a.resolverId to a.addresses.mapNotNull {
+                    try { java.net.InetAddress.getByName(it) } catch (_: Exception) { null }
+                }
+            }
+            ctx.put("dns.answers", map)
+            val nonEmpty = answers.filter { it.addresses.isNotEmpty() }
+            if (nonEmpty.isEmpty()) {
+                return@safeScan PluginHelpers.abstain(id, "no resolver answers", t0, EvidenceClass.STRONG)
+            }
+            val sets = nonEmpty.map { it.addresses.toSet() }
             val intersection = sets.reduce { a, b -> a.intersect(b) }
             val union = sets.reduce { a, b -> a.union(b) }
             val divergent = union - intersection
-            val signal = if (divergent.isNotEmpty()) PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG, "divergent=${divergent.size}")
-            else PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.MODERATE, "consistent")
-            PluginResult(id, signal, "resolvers=${answers.size} divergent=${divergent.size}",
-                mapOf("intersection" to intersection.joinToString(), "divergent" to divergent.joinToString()),
-                durationMs = System.currentTimeMillis() - t0)
+            val sources = nonEmpty.groupBy { it.source }.mapValues { it.value.size }
+            val signal = when {
+                divergent.isNotEmpty() && nonEmpty.size >= 2 ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.STRONG,
+                        "cross-resolver divergence=${divergent.size} sources=$sources")
+                else ->
+                    PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.MODERATE, "consistent across ${nonEmpty.size} resolvers")
+            }
+            PluginResult(id, signal,
+                "resolvers=${nonEmpty.size} divergent=${divergent.size} sources=$sources",
+                mapOf(
+                    "intersection" to intersection.joinToString(),
+                    "divergent" to divergent.joinToString(),
+                    "resolvers" to nonEmpty.joinToString { "${it.resolverId}:${it.addresses.size}" }
+                ), durationMs = System.currentTimeMillis() - t0)
         }
     }
 }
 
+
 class RecordFragmentPlugin(private val splits: () -> List<Int> = { listOf(1, 2, 5, 10) }) : ScanPlugin {
     override val id = "plugin.host.recordfragment"; override val displayName = "Record Fragment"
     override val evidenceClass = EvidenceClass.DEFINITIVE
-    override val cost = PluginCost(2500, 16384, 4)
+    override val cost = PluginCost(3500, 24000, 5)
     override val dependsOn = setOf("tcpconnect", "tls")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
@@ -621,21 +775,34 @@ class RecordFragmentPlugin(private val splits: () -> List<Int> = { listOf(1, 2, 
         return PluginHelpers.safeScan(id, EvidenceClass.DEFINITIVE, t0) {
             ctx.ensureActive()
             val probe = TlsProbe(ctx.timeoutMs.toInt())
-            val normal = ctx.get<TlsProbeResult>("tls.probe") ?: probe.probe(target)
-            val hits = splits().map { sp -> sp to probe.probe(target, sp) }
-            val anyOk = hits.any { it.second.success }
+            val normal = ctx.get<TlsProbeResult>("tls.probe") ?: probe.probe(target, null)
+            val points = splits()
+            val hits = points.map { sp -> sp to probe.probe(target, sp) }
+            // multi-point single connection style
+            val multi = probe.probeMulti(target, points.toIntArray())
+            val anyOk = hits.any { it.second.success } || multi.success
+            if (multi.ja3 != null) ctx.put("ja3self", multi.ja3)
+            if (multi.clientHello.isNotEmpty()) ctx.put("tls.clientHello", multi.clientHello)
             val signal = when {
-                !normal.success && anyOk -> PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.DEFINITIVE, "multi-frag works")
-                normal.success && anyOk -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both ok")
-                normal.success && !anyOk -> PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.STRONG, "frag fails")
-                else -> PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both fail")
+                !normal.success && anyOk ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.DEFINITIVE, "multi-point record fragment works")
+                normal.success && anyOk ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "both paths ok")
+                normal.success && !anyOk ->
+                    PluginSignal(id, SignalPolarity.REFUTES_BYPASS, EvidenceClass.STRONG, "all fragment points fail")
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.DEFINITIVE, "no path")
             }
-            PluginResult(id, signal, "normal=${normal.success} frag=${hits.filter { it.second.success }.map { it.first }}",
-                hits.associate { "split_${it.first}" to it.second.toShortString() },
-                durationMs = System.currentTimeMillis() - t0)
+            val details = hits.associate { "split_${it.first}" to it.second.toShortString() }.toMutableMap()
+            details["multi"] = multi.toShortString()
+            details["ja3"] = multi.ja3 ?: ""
+            PluginResult(id, signal,
+                "normal=${normal.success} frag=${hits.filter { it.second.success }.map { it.first }} multi=${multi.success}",
+                details, durationMs = System.currentTimeMillis() - t0)
         }
     }
 }
+
 
 class SniExploitabilityPlugin : ScanPlugin {
     override val id = "plugin.host.snisan"; override val displayName = "SNI SAN"
@@ -706,22 +873,32 @@ class DnsTransportPlugin : ScanPlugin {
     }
 }
 
+
 class Ja3SelfPlugin : ScanPlugin {
     override val id = "plugin.host.ja3self"; override val displayName = "JA3 Self"
     override val evidenceClass: EvidenceClass? = null
-    override val cost = PluginCost(5, 0, 0)
+    override val cost = PluginCost(50, 0, 0)
     override val dependsOn = setOf("tls")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        val probe = ctx.get<TlsProbeResult>("tls.probe")
-        val pseudo = listOfNotNull(probe?.protocol, probe?.cipher).joinToString(",")
-        val hash = pseudo.hashCode().toUInt().toString(16)
-        ctx.put("ja3self", hash)
+        val cached = ctx.get<String>("ja3self")
+        val hello = ctx.get<ByteArray>("tls.clientHello")
+        val ja3 = cached ?: hello?.let { Ja3Calculator.fromClientHello(it) }
+            ?: ctx.get<TlsProbeResult>("tls.probe")?.ja3
+            ?: run {
+                // craft hello offline for fingerprint of our builder
+                val h = ClientHelloBuilder.build(target.effectiveSni)
+                ctx.put("tls.clientHello", h)
+                Ja3Calculator.fromClientHello(h)
+            }
+        ctx.put("ja3self", ja3)
         return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.WEAK, "informational"),
-            "ja3self≈$hash", mapOf("hash" to hash), durationMs = System.currentTimeMillis() - t0)
+            "ja3=$ja3", mapOf("ja3" to ja3, "helloBytes" to (hello?.size?.toString() ?: "0")),
+            durationMs = System.currentTimeMillis() - t0)
     }
 }
+
 
 class AlpnMatrixPlugin : ScanPlugin {
     override val id = "plugin.host.alpnmatrix"; override val displayName = "ALPN Matrix"
@@ -738,19 +915,36 @@ class AlpnMatrixPlugin : ScanPlugin {
     }
 }
 
+
 class QuicPlugin : ScanPlugin {
     override val id = "plugin.host.quic"; override val displayName = "QUIC/H3"
     override val evidenceClass = EvidenceClass.MODERATE
-    override val cost = PluginCost(1000, 4000, 1)
+    override val cost = PluginCost(1500, 4000, 1)
     override val dependsOn = setOf("dns")
     override val requiredProfile = emptySet<NetworkProfile>()
     override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
         val t0 = System.currentTimeMillis()
-        return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, "cronet-only on Android"),
-            "QUIC deferred (Cronet on Android)", mapOf("status" to "unsupported_on_jvm_core"),
-            durationMs = System.currentTimeMillis() - t0)
+        return PluginHelpers.safeScan(id, EvidenceClass.MODERATE, t0) {
+            ctx.ensureActive()
+            val r = QuicProbe.probe(target.host, 443, ctx.timeoutMs.toInt().coerceAtMost(3000))
+            // Also check HTTPS RR ALPN h3 hint
+            val rr = DnsHttpsRecordQuery().query(target.host)
+            val h3hint = rr.alpn.any { it.contains("h3", true) } || (rr.rawHint?.contains("h3") == true)
+            val signal = when {
+                r.reachable && h3hint ->
+                    PluginSignal(id, SignalPolarity.SUPPORTS_BYPASS, EvidenceClass.MODERATE, "QUIC path + h3 hint")
+                r.reachable ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, r.detail)
+                else ->
+                    PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, r.detail)
+            }
+            PluginResult(id, signal, "quic=${r.reachable} h3hint=$h3hint ${r.detail}",
+                mapOf("reachable" to r.reachable.toString(), "detail" to r.detail, "h3" to h3hint.toString()),
+                durationMs = System.currentTimeMillis() - t0)
+        }
     }
 }
+
 
 class CdnEdgePlugin : ScanPlugin {
     override val id = "plugin.host.cdnedge"; override val displayName = "CDN Edge"

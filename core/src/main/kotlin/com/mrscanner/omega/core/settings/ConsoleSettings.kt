@@ -18,7 +18,7 @@ data class ConsoleSettings(
     var testFragmentBypass: Boolean = true,
     var testFingerprint: Boolean = false,
     var testEch: Boolean = true,
-    var testQuic: Boolean = false,
+    var testQuic: Boolean = true,
     var testCdnEdge: Boolean = false,
     var testAlpnMatrix: Boolean = false,
     var testDnsTransport: Boolean = true,
@@ -30,7 +30,9 @@ data class ConsoleSettings(
     var redactionLevel: RedactionLevel = RedactionLevel.STANDARD,
     var updateCheckEnabled: Boolean = true,
     var selfTestOnFirstRun: Boolean = true,
-    var deepScan: Boolean = true
+    var deepScan: Boolean = true,
+    var operatorHint: String? = "af",
+    var enableActiveInjectionProbes: Boolean = true
 ) {
     fun configHash(): String {
         val s = "c=$concurrency|t=$timeoutMs|r=$retries|pre=$precheckTimeoutMs|dedup=$dedupByIp|dns=$dnsRegion|frag=$testFragmentBypass|ech=$testEch|quic=$testQuic|cdn=$testCdnEdge|alpn=$testAlpnMatrix|dot=$testDnsTransport|splits=${recordFragmentSplits.joinToString(",")}|deep=$deepScan|customDns=${customDnsServers.sorted().joinToString(",")}|sni=${sniSpoofCandidates.sorted().joinToString(",")}"

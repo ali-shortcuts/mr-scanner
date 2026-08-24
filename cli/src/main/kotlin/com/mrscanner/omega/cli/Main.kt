@@ -4,6 +4,7 @@ import com.mrscanner.omega.core.cli.CliSession
 import com.mrscanner.omega.core.cli.commands.CommandFactory
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
+import com.mrscanner.omega.core.db.OmegaDatabase
 import com.mrscanner.omega.core.plugin.NetworkProfile
 import com.mrscanner.omega.core.scheduler.ScanEngine
 import com.mrscanner.omega.core.settings.ConsoleSettings
@@ -13,13 +14,15 @@ import java.io.File
 fun main(args: Array<String>) = runBlocking {
     val home = File(System.getProperty("user.home"), ".mr-scanner-omega").apply { mkdirs() }
     val settings = ConsoleSettings()
-    val engine = ScanEngine(settings, holeStore = HoleAgeStore(File(home, "data")),
-        checkpointStore = CheckpointStore(File(home, "data")), profile = NetworkProfile.WIFI_UNMETERED)
+    val dataDir = File(home, "data")
+    val db = OmegaDatabase.open(dataDir)
+    val engine = ScanEngine(settings, holeStore = HoleAgeStore(dataDir),
+        checkpointStore = CheckpointStore(dataDir), profile = NetworkProfile.WIFI_UNMETERED, database = db)
     val interpreter = CliInterpreter(CommandFactory.defaultRegistry(), engine)
     val session = CliSession(settings)
     println("""
 +==================================================+
-|  Mr. Scanner Ω  v2.0.0-omega                     |
+|  Mr. Scanner Ω  v2.1.0-omega                     |
 |  ConfidenceEngineV3 · 41-plugin architecture     |
 |  Engine: Confidence v3 (symmetric log-odds)      |
 |  Creator: Mr Ali · t.me/Mr_Ali_2025              |

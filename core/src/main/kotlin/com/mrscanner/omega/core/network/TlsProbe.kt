@@ -1,4 +1,5 @@
 package com.mrscanner.omega.core.network
+
 import com.mrscanner.omega.core.plugin.ScanTarget
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -15,24 +16,71 @@ data class TlsProbeResult(
     val sans: List<String> = emptyList(),
     val cn: String? = null,
     val error: String? = null,
-    val fragmentAt: Int? = null
+    val fragmentAt: Int? = null,
+    val clientHello: ByteArray = ByteArray(0),
+    val ja3: String? = null,
+    val mode: String = "ssl"
 ) {
-    fun toShortString() = if (success) "ok/${protocol ?: "?"} cert=${cn ?: "?"}" else "fail:${error ?: "?"}"
+    fun toShortString() = if (success) "ok/${protocol ?: "?"} mode=$mode cert=${cn ?: "?"}" else "fail:${error ?: "?"}"
 }
 
+/**
+ * TLS probe facade.
+ * Preferred path: FragmentingSocket (real ClientHello record fragmentation).
+ * Fallback: classic SSLSocket for environments that block raw handshake crafting.
+ */
 class TlsProbe(private val timeoutMs: Int = 5_000) {
-    fun probe(target: ScanTarget, fragmentAt: Int? = null): TlsProbeResult =
-        if (fragmentAt == null) normal(target) else frag(target, fragmentAt)
 
-    private fun tm() = object : X509TrustManager {
-        override fun checkClientTrusted(c: Array<out X509Certificate>?, a: String?) {}
-        override fun checkServerTrusted(c: Array<out X509Certificate>?, a: String?) {}
-        override fun getAcceptedIssuers() = emptyArray<X509Certificate>()
+    fun probe(target: ScanTarget, fragmentAt: Int? = null): TlsProbeResult {
+        val frag = FragmentingSocket.probe(
+            host = target.host,
+            port = target.port,
+            sni = target.effectiveSni,
+            timeoutMs = timeoutMs,
+            fragmentAt = fragmentAt
+        )
+        if (frag.success || fragmentAt != null) {
+            return TlsProbeResult(
+                success = frag.success,
+                protocol = frag.protocolHint,
+                certificate = frag.certificate,
+                sans = frag.sans,
+                cn = frag.cn,
+                error = frag.error,
+                fragmentAt = fragmentAt,
+                clientHello = frag.clientHello,
+                ja3 = frag.ja3,
+                mode = frag.mode
+            )
+        }
+        return normalSsl(target)
     }
 
-    private fun normal(target: ScanTarget): TlsProbeResult = try {
+    fun probeMulti(target: ScanTarget, splits: IntArray): TlsProbeResult {
+        val frag = FragmentingSocket.probe(
+            host = target.host,
+            port = target.port,
+            sni = target.effectiveSni,
+            timeoutMs = timeoutMs,
+            multiSplit = splits
+        )
+        return TlsProbeResult(
+            success = frag.success,
+            protocol = frag.protocolHint,
+            certificate = frag.certificate,
+            sans = frag.sans,
+            cn = frag.cn,
+            error = frag.error,
+            fragmentAt = splits.firstOrNull(),
+            clientHello = frag.clientHello,
+            ja3 = frag.ja3,
+            mode = frag.mode
+        )
+    }
+
+    private fun normalSsl(target: ScanTarget): TlsProbeResult = try {
         val ctx = SSLContext.getInstance("TLS")
-        ctx.init(null, arrayOf(tm()), java.security.SecureRandom())
+        ctx.init(null, arrayOf(trustAll()), java.security.SecureRandom())
         (ctx.socketFactory.createSocket() as SSLSocket).use { s ->
             s.soTimeout = timeoutMs
             s.connect(InetSocketAddress(target.host, target.port), timeoutMs)
@@ -44,34 +92,24 @@ class TlsProbe(private val timeoutMs: Int = 5_000) {
             } catch (_: Exception) {}
             s.startHandshake()
             val cert = s.session.peerCertificates.firstOrNull() as? X509Certificate
-            TlsProbeResult(true, s.session.protocol, s.session.cipherSuite, cert,
-                cert?.let { extractSans(it) } ?: emptyList(), cert?.let { extractCn(it) })
+            TlsProbeResult(
+                success = true,
+                protocol = s.session.protocol,
+                cipher = s.session.cipherSuite,
+                certificate = cert,
+                sans = cert?.let { extractSans(it) } ?: emptyList(),
+                cn = cert?.let { extractCn(it) },
+                mode = "ssl-socket"
+            )
         }
     } catch (e: Exception) {
-        TlsProbeResult(false, error = e.message ?: e::class.simpleName)
+        TlsProbeResult(success = false, error = e.message ?: e::class.simpleName, mode = "ssl-socket")
     }
 
-    private fun frag(target: ScanTarget, splitAt: Int): TlsProbeResult = try {
-        Socket().use { tcp ->
-            tcp.soTimeout = timeoutMs; tcp.tcpNoDelay = true
-            tcp.connect(InetSocketAddress(target.host, target.port), timeoutMs)
-            val ctx = SSLContext.getInstance("TLS")
-            ctx.init(null, arrayOf(tm()), java.security.SecureRandom())
-            val ssl = ctx.socketFactory.createSocket(tcp, target.effectiveSni, target.port, true) as SSLSocket
-            ssl.soTimeout = timeoutMs
-            try {
-                val p = ssl.sslParameters
-                p.serverNames = listOf(javax.net.ssl.SNIHostName(target.effectiveSni))
-                ssl.sslParameters = p
-            } catch (_: Exception) {}
-            if (splitAt > 0) Thread.sleep(splitAt.coerceAtMost(20).toLong())
-            ssl.startHandshake()
-            val cert = ssl.session.peerCertificates.firstOrNull() as? X509Certificate
-            TlsProbeResult(true, ssl.session.protocol, ssl.session.cipherSuite, cert,
-                cert?.let { extractSans(it) } ?: emptyList(), cert?.let { extractCn(it) }, fragmentAt = splitAt)
-        }
-    } catch (e: Exception) {
-        TlsProbeResult(false, error = e.message ?: e::class.simpleName, fragmentAt = splitAt)
+    private fun trustAll() = object : X509TrustManager {
+        override fun checkClientTrusted(c: Array<out X509Certificate>?, a: String?) {}
+        override fun checkServerTrusted(c: Array<out X509Certificate>?, a: String?) {}
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
 
     companion object {

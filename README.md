@@ -8,26 +8,41 @@
 | | |
 |---|---|
 | Package | `com.mrscanner.omega` |
-| Version | **2.0.0-omega** |
+| Version | **2.1.0-omega** |
 | Engine | Confidence v3 (symmetric log-odds) |
 | Plugins | **41 catalog · 37 active by default** |
 | minSdk / targetSdk | 26 / 34 |
 
 ---
 
+
+## What's new in 2.1.0 (deep engine)
+
+- **Real TLS ClientHello record fragmentation** (`FragmentingSocket`) — not sleep-fakes
+- **True multi-resolver DNS** (UDP + DoH Cloudflare/Google/Quad9 + system)
+- **JA3** from crafted ClientHello bytes
+- **QUIC UDP path probe** + HTTPS RR h3 hints
+- **Zero-rating operator packs** (AF + captive) on cellular profile
+- **Active lab injection probes** (safe canary reflection)
+- **ApkStaticAnalyzer** (`apk <file.apk>` CLI)
+- **SQLite persistence** (Room-compatible schema) for holes/checkpoints
+- **FGS auto-promote** on bulk scans · **UpdateChecker** on About
+- **AliasPrefixDeduper** wired into `cidr`
+- Expanded offline **CVE** signature table
+
 ## Download APK (32-bit + 64-bit)
 
 | APK | ABI | Recommended for |
 |---|---|---|
-| [`MrScannerOmega-2.0.0-universal.apk`](dist/MrScannerOmega-2.0.0-universal.apk) | 32+64 | **Default — all phones** |
-| [`MrScannerOmega-2.0.0-arm64-v8a.apk`](dist/MrScannerOmega-2.0.0-arm64-v8a.apk) | 64-bit | Modern phones (2017+) |
-| [`MrScannerOmega-2.0.0-armeabi-v7a.apk`](dist/MrScannerOmega-2.0.0-armeabi-v7a.apk) | 32-bit | Older devices |
+| [`MrScannerOmega-2.1.0-universal.apk`](dist/MrScannerOmega-2.1.0-universal.apk) | 32+64 | **Default — all phones** |
+| [`MrScannerOmega-2.1.0-arm64-v8a.apk`](dist/MrScannerOmega-2.1.0-arm64-v8a.apk) | 64-bit | Modern phones (2017+) |
+| [`MrScannerOmega-2.1.0-armeabi-v7a.apk`](dist/MrScannerOmega-2.1.0-armeabi-v7a.apk) | 32-bit | Older devices |
 
 Also: CLI zip · full source tarball · [`SPECS.md`](dist/SPECS.md) · [`SHA256SUMS.txt`](dist/SHA256SUMS.txt)  
-GitHub Release: [v2.0.0-omega](https://github.com/ali-shortcuts/mr-scanner/releases/tag/v2.0.0-omega)
+GitHub Release: [v2.1.0-omega](https://github.com/ali-shortcuts/mr-scanner/releases/tag/v2.1.0-omega)
 
 ```bash
-adb install -r dist/MrScannerOmega-2.0.0-universal.apk
+adb install -r dist/MrScannerOmega-2.1.0-universal.apk
 ```
 
 ---
@@ -113,8 +128,8 @@ Unit coverage includes ConfidenceEngineV3 truth table, SAN/wildcard match, DAG t
 Optional secrets for signed release: `RELEASE_KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 
 ```bash
-git tag v2.0.0-omega
-git push origin v2.0.0-omega
+git tag v2.1.0-omega
+git push origin v2.1.0-omega
 ```
 
 ---

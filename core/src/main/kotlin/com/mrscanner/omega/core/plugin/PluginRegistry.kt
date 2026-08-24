@@ -18,7 +18,7 @@ object PluginRegistry {
         all += SniFrontingPlugin { settings.sniSpoofCandidates.ifEmpty { listOf("cloudflare.com","www.cloudflare.com","cdnjs.cloudflare.com") } }
         if (settings.testFragmentBypass) all += TlsFragmentationPlugin()
         all += PayloadInjectionPlugin(); all += DohBypassPlugin(); all += HeaderInjectionPlugin()
-        all += ZeroRatedPlugin(); all += SniSpoofingPlugin(); all += MisconfigPlugin(); all += CveAuditPlugin()
+        all += ZeroRatedPlugin { settings.operatorHint }; all += SniSpoofingPlugin(); all += MisconfigPlugin(); all += CveAuditPlugin()
         // 10 advanced
         all += DnsConsistencyPlugin(multi)
         if (settings.testFragmentBypass) all += RecordFragmentPlugin { settings.recordFragmentSplits }

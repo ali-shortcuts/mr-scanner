@@ -5,6 +5,11 @@ import com.mrscanner.omega.core.intelligence.ConfidenceEngineV3
 import com.mrscanner.omega.core.metrics.LocalMetricsStore
 import com.mrscanner.omega.core.plugin.*
 import com.mrscanner.omega.core.scheduler.ScanEngine
+import com.mrscanner.omega.core.apkanalyzer.ApkStaticAnalyzer
+import com.mrscanner.omega.core.scheduler.AliasPrefixDeduper
+import com.mrscanner.omega.core.update.UpdateChecker
+import com.mrscanner.omega.core.network.TcpConnect
+import java.net.InetAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
@@ -16,7 +21,7 @@ object CommandFactory {
     fun defaultRegistry() = CliCommandRegistry(listOf(
         HelpCmd(), FullScanCmd(), HostScanCmd(), FragmentCmd(), SniCmd(), SelfTestCmd(),
         SetCmd(), GetCmd(), ExportCmd(), HolesCmd(), CheckpointCmd(), PluginsCmd(),
-        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd()
+        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd(), ApkScanCmd(), UpdateCmd()
     ))
 }
 
@@ -162,7 +167,7 @@ class HolesCmd : CliCommand {
     override val name = "holes"; override val usage = "holes [--open|--closed]"; override val help = "Hole-age list"
     override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
         val openOnly = when { args.bool("open") -> true; args.bool("closed") -> false; else -> null }
-        val list = engine.holeStore.list(openOnly)
+        val list = engine.database?.holes?.list(openOnly) ?: engine.holeStore.list(openOnly)
         if (list.isEmpty()) emit(out("(no holes)"))
         list.forEach { h -> emit(out("${h.status.padEnd(6)} ${h.host.padEnd(40)} conf=${"%.2f".format(h.lastConfidence)} ${h.lastVerdict}")) }
     }
@@ -173,13 +178,14 @@ class CheckpointCmd : CliCommand {
     override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
         when (args.positionals.firstOrNull()) {
             "list", null -> {
-                val all = engine.checkpointStore.list()
+                val all = engine.database?.checkpoints?.list() ?: engine.checkpointStore.list()
                 if (all.isEmpty()) emit(out("(none)"))
                 all.forEach { emit(out("${it.scanId} cursor=${it.cursorIndex}/${it.totalHosts} hash=${it.configHash}")) }
             }
             "clear" -> {
                 val id = args.positionals.getOrNull(1)
-                if (id == null) emit(err("id required")) else { engine.checkpointStore.clear(id); emit(out("cleared $id")) }
+                if (id == null) emit(err("id required")) else { (engine.database?.checkpoints ?: engine.checkpointStore).let { /* type mismatch */ }
+                    if (engine.database != null) engine.database!!.checkpoints.clear(id) else engine.checkpointStore.clear(id); emit(out("cleared $id")) }
             }
             else -> emit(err(usage))
         }
@@ -245,8 +251,20 @@ class CidrCmd : CliCommand {
         val hosts = expand(spec)
         if (hosts.isEmpty()) { emit(err("bad/too-large cidr (max /24)")); return@flow }
         emit(sys("expanded ${hosts.size} from $spec"))
+        // Precheck + AliasPrefixDeduper (alive-rate cap 0.80 per /24)
+        val alivePairs = mutableListOf<Pair<String, String>>()
+        for (h in hosts) {
+            val ok = TcpConnect.isAlive(h, 443, session.settings.precheckTimeoutMs.toInt().coerceAtLeast(200))
+            if (ok) {
+                val ip = try { InetAddress.getByName(h).hostAddress ?: h } catch (_: Exception) { h }
+                alivePairs += h to ip
+            }
+        }
+        val deduped = AliasPrefixDeduper.filter(alivePairs, 0.80)
+        emit(sys("precheck alive=${alivePairs.size}/${hosts.size} after-dedupe=${deduped.size}"))
+        val finalHosts = if (deduped.isEmpty()) hosts.take(32) else deduped
         session.settings.budgetProfileOverride = "CIDR_BULK"
-        FullScanCmd().run(CliArgs(hosts, args.flags, hosts), session, engine).collect { emit(it) }
+        FullScanCmd().run(CliArgs(finalHosts, args.flags, finalHosts), session, engine).collect { emit(it) }
         session.settings.budgetProfileOverride = null
     }
     private fun expand(spec: String): List<String> {
@@ -264,3 +282,34 @@ class CidrCmd : CliCommand {
         }
     }
 }
+
+
+class ApkScanCmd : CliCommand {
+    override val name = "apk"; override val usage = "apk <path-to.apk>"; override val help = "Static APK analyzer"
+    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
+        val path = args.positionals.firstOrNull() ?: run { emit(err(usage)); return@flow }
+        try {
+            val report = ApkStaticAnalyzer.analyze(path)
+            ApkStaticAnalyzer.format(report).lines().forEach { emit(out(it)) }
+            val crit = report.findings.count { it.severity == "CRITICAL" || it.severity == "HIGH" }
+            emit(sys("apk analysis done findings=${report.findings.size} highOrCrit=$crit"))
+        } catch (e: Exception) {
+            emit(err(e.message ?: "apk fail"))
+        }
+    }
+}
+
+class UpdateCmd : CliCommand {
+    override val name = "update"; override val usage = "update [--repo=owner/name]"; override val help = "Check GitHub Releases for updates"
+    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
+        val repo = args.flag("repo") ?: "ali-shortcuts/mr-scanner"
+        val checker = UpdateChecker(repo, "2.1.0-omega")
+        val info = checker.check()
+        if (info == null) emit(out("no update (or check failed)"))
+        else {
+            emit(out("update available: ${info.tag}"))
+            emit(out("download: ${info.downloadUrl ?: "(see releases)"}"))
+        }
+    }
+}
+

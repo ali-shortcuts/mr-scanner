@@ -24,6 +24,7 @@ import com.mrscanner.omega.core.plugin.PluginRegistry
 import com.mrscanner.omega.core.plugin.SignalPolarity
 import com.mrscanner.omega.core.plugin.Verdict
 import com.mrscanner.omega.network.AndroidNetworkProfile
+import com.mrscanner.omega.core.update.UpdateChecker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -163,6 +164,7 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = false
             results.text = ""
             status.text = "Scanning ${hosts.size}…"
+            OmegaApp.instance.promoteScanService()
             bar.progress = 0
             scanJob = scope.launch {
                 val engine = OmegaApp.instance.engine
@@ -191,6 +193,7 @@ class MainActivity : AppCompatActivity() {
                     status.text = "Error: ${e.message}"
                 } finally {
                     collector.cancel()
+                    OmegaApp.instance.stopScanService()
                     btnStart.isEnabled = true
                 }
             }
@@ -268,6 +271,8 @@ class MainActivity : AppCompatActivity() {
             appendLine("configHash: ${settings.configHash()}")
             appendLine("Network profile: ${OmegaApp.instance.engine.profile}")
             appendLine("minSdk 26 · targetSdk 34")
+            appendLine()
+            appendLine("Update channel: ali-shortcuts/mr-scanner")
         }
 
         bindSocial(root.findViewById(R.id.linkEmail), R.drawable.ic_brand_email,
@@ -284,6 +289,17 @@ class MainActivity : AppCompatActivity() {
             R.string.label_instagram, R.string.handle_instagram, R.string.url_instagram)
         bindSocial(root.findViewById(R.id.linkYoutube), R.drawable.ic_brand_youtube,
             R.string.label_youtube, R.string.handle_youtube, R.string.url_youtube)
+        // Live update check (architecture §12.4)
+        scope.launch {
+            try {
+                val checker = UpdateChecker("ali-shortcuts/mr-scanner", BuildConfig.VERSION_NAME)
+                val info = checker.check()
+                if (info != null) {
+                    val specs = root.findViewById<TextView>(R.id.aboutSpecsBody)
+                    specs.append("\n\nUpdate available: ${info.tag}\n${info.downloadUrl ?: ""}")
+                }
+            } catch (_: Exception) { }
+        }
     }
 
     private fun bindSocial(
