@@ -92,10 +92,13 @@ class MainActivity : AppCompatActivity() {
                 OmegaApp.instance.settings.operatorHint = op.mccMnc
             }
         } catch (_: Throwable) { }
-        try {
-            ReverifyScheduler.schedule(this, 12)
-        } catch (t: Throwable) {
-            android.util.Log.e("MainActivity", "WorkManager schedule failed", t)
+        // Defer WorkManager: it must never block or crash first frame
+        content.post {
+            try {
+                ReverifyScheduler.schedule(this@MainActivity, 12)
+            } catch (t: Throwable) {
+                android.util.Log.e("MainActivity", "WorkManager schedule failed", t)
+            }
         }
         selectTab(0)
         try {

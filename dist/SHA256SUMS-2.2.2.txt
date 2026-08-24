@@ -1,0 +1,4 @@
+f5040b2ca3cb44e7b27392c7acf6f5271de5d74d743aac365ba76fbcb7814fc3  MrScannerOmega-2.2.2-stable-arm64-v8a.apk
+f5040b2ca3cb44e7b27392c7acf6f5271de5d74d743aac365ba76fbcb7814fc3  MrScannerOmega-2.2.2-stable-armeabi-v7a.apk
+f5040b2ca3cb44e7b27392c7acf6f5271de5d74d743aac365ba76fbcb7814fc3  MrScannerOmega-2.2.2-stable-universal.apk
+f5040b2ca3cb44e7b27392c7acf6f5271de5d74d743aac365ba76fbcb7814fc3  MrScannerOmega-2.2.2-stable.apk

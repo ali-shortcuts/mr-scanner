@@ -8,95 +8,86 @@ import android.os.Build
 import android.util.Log
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
-import com.mrscanner.omega.core.db.OmegaDatabase
+import com.mrscanner.omega.core.plugin.NetworkProfile
 import com.mrscanner.omega.core.scheduler.ScanEngine
 import com.mrscanner.omega.core.settings.ConsoleSettings
 import com.mrscanner.omega.network.AndroidNetworkProfile
 import com.mrscanner.omega.service.ScanForegroundService
 import java.io.File
 
+/**
+ * Crash-safe Application.
+ *
+ * IMPORTANT: Do NOT open JDBC/sqlite-jdbc here. That library ships desktop natives
+ * and historically crashed 32/64-bit Android at process start.
+ * Android uses file-backed HoleAgeStore/CheckpointStore only.
+ */
 class OmegaApp : Application() {
-    lateinit var settings: ConsoleSettings
+    @Volatile lateinit var settings: ConsoleSettings
         private set
-    lateinit var engine: ScanEngine
-        private set
-    var database: OmegaDatabase? = null
+    @Volatile lateinit var engine: ScanEngine
         private set
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Never crash the process in Application.onCreate — show UI even if optional services fail.
-        settings = try {
-            ConsoleSettings()
-        } catch (t: Throwable) {
-            Log.e(TAG, "settings init failed", t)
+        // Step-by-step, each step isolated so one failure never kills the process.
+        settings = runCatching { ConsoleSettings() }.getOrElse {
+            Log.e(TAG, "ConsoleSettings failed", it)
             ConsoleSettings()
         }
-        val data = try {
+        val dataDir = runCatching {
             File(filesDir, "omega-data").apply { mkdirs() }
-        } catch (t: Throwable) {
-            Log.e(TAG, "data dir failed", t)
+        }.getOrElse {
+            Log.e(TAG, "filesDir failed", it)
             File(cacheDir, "omega-data").apply { mkdirs() }
         }
-        database = try {
-            OmegaDatabase.open(data)
-        } catch (t: Throwable) {
-            Log.e(TAG, "database open failed — using file stores only", t)
-            null
-        }
-        engine = try {
+        val profile = runCatching { AndroidNetworkProfile.detect(this) }
+            .getOrDefault(NetworkProfile.UNKNOWN)
+        engine = runCatching {
             ScanEngine(
                 settings = settings,
-                holeStore = HoleAgeStore(data),
-                checkpointStore = CheckpointStore(data),
-                profile = try {
-                    AndroidNetworkProfile.detect(this)
-                } catch (_: Throwable) {
-                    com.mrscanner.omega.core.plugin.NetworkProfile.UNKNOWN
-                },
-                database = database
+                holeStore = HoleAgeStore(dataDir),
+                checkpointStore = CheckpointStore(dataDir),
+                profile = profile,
+                database = null // NEVER JDBC on Android
             )
-        } catch (t: Throwable) {
-            Log.e(TAG, "engine init failed — minimal engine", t)
-            ScanEngine(settings = settings)
+        }.getOrElse {
+            Log.e(TAG, "ScanEngine failed, using bare engine", it)
+            ScanEngine(settings = settings, profile = profile, database = null)
         }
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val ch = NotificationChannel(
-                    CHANNEL_SCAN,
-                    getString(R.string.scan_channel_name),
-                    NotificationManager.IMPORTANCE_LOW
-                )
-                ch.description = getString(R.string.scan_channel_desc)
-                getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
-            }
-        } catch (t: Throwable) {
-            Log.e(TAG, "notification channel failed", t)
-        }
+        runCatching { createScanChannel() }
+            .onFailure { Log.e(TAG, "notification channel failed", it) }
+    }
+
+    private fun createScanChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        val ch = NotificationChannel(
+            CHANNEL_SCAN,
+            getString(R.string.scan_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply { description = getString(R.string.scan_channel_desc) }
+        nm.createNotificationChannel(ch)
     }
 
     fun promoteScanService() {
-        try {
+        runCatching {
             val i = Intent(this, ScanForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
             else startService(i)
-        } catch (t: Throwable) {
-            Log.e(TAG, "promote FGS failed", t)
-        }
+        }.onFailure { Log.e(TAG, "FGS start failed", it) }
     }
 
     fun stopScanService() {
-        try {
-            stopService(Intent(this, ScanForegroundService::class.java))
-        } catch (_: Throwable) {
-        }
+        runCatching { stopService(Intent(this, ScanForegroundService::class.java)) }
     }
 
     companion object {
         private const val TAG = "OmegaApp"
         const val CHANNEL_SCAN = "scan_progress"
-        lateinit var instance: OmegaApp
+        @JvmStatic lateinit var instance: OmegaApp
             private set
+        fun isInitialized(): Boolean = this::instance.isInitialized
     }
 }
