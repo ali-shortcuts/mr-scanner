@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand / surfaces (dark identity) -->
+    <color name="omega_bg">#FF0B1020</color>
+    <color name="omega_surface">#FF121A2F</color>
+    <color name="omega_surface_elevated">#FF1A2440</color>
+    <color name="omega_primary">#FF5B8CFF</color>
+    <color name="omega_primary_dim">#FF2A3550</color>
+    <color name="omega_secondary">#FF9AD1FF</color>
+    <color name="omega_on_bg">#FFE8F1FF</color>
+    <color name="omega_muted">#FFB0B8C8</color>
+    <color name="omega_muted_dim">#FF667085</color>
+    <color name="omega_terminal_bg">#FF070B14</color>
+
+    <!-- Verdict chips §7.4 -->
+    <color name="verdict_candidate">#FF3DDC97</color>
+    <color name="verdict_weak">#FFB0B8C8</color>
+    <color name="verdict_not_vuln">#FFFF6B6B</color>
+
+    <color name="ic_launcher_background">#FF0B1020</color>
+</resources>

@@ -1,8 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Mr Scanner Omega</string>
-    <string name="disclaimer">Strictly for authorized security research, network audits, and code analysis. Unauthorized scanning may be illegal.</string>
-    <string name="engine_info">Engine: Confidence v3 (symmetric log-odds) · Plugins: 41</string>
+    <string name="app_name">Mr. Scanner Ω</string>
+    <string name="app_name_full">Mr. Scanner Ω</string>
+    <string name="creator_name">Mr Ali</string>
+    <string name="telegram_personal">t.me/Mr_Ali_2025</string>
+    <string name="telegram_personal_url">https://t.me/Mr_Ali_2025</string>
+    <string name="telegram_channel">t.me/Ali_shortcuts</string>
+    <string name="telegram_channel_url">https://t.me/Ali_shortcuts</string>
+    <string name="email_contact">ali.hekmati2026@gmail.com</string>
+    <string name="email_mailto">mailto:ali.hekmati2026@gmail.com</string>
+    <string name="social_line">Facebook: AliShortcuts · TikTok/Instagram/YouTube: ali_shortcuts</string>
+    <string name="facebook_url">https://www.facebook.com/AliShortcuts</string>
+    <string name="disclaimer">Strictly for authorized security research, network audits, and code analysis.</string>
+    <string name="disclaimer_long">Strictly for authorized security research, network audits, and code analysis. Unauthorized scanning of networks you do not own or have permission to test may be illegal.</string>
+    <string name="engine_info">Engine: Confidence v3 (symmetric log-odds)</string>
+    <string name="engine_plugins">Plugins: 41 (22 base + 9 bypass + 10 advanced)</string>
+    <string name="engine_transport">Transport: OkHttp + optional Cronet H3</string>
+    <string name="architecture_version">Architecture: Ω-2.0.0-FINAL</string>
     <string name="scan_channel_name">Scan progress</string>
     <string name="scan_channel_desc">Foreground scan status</string>
+    <string name="about_title">About</string>
+    <string name="app_specs_title">App Specs &amp; Engine Info</string>
+    <string name="creator_title">Creator</string>
+    <string name="contacts_title">Contacts</string>
+    <string name="warning_title">Warning</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_scan">Scan</string>
+    <string name="tab_term">Term</string>
+    <string name="tab_about">About</string>
+    <string name="subtitle_default">ConfidenceEngineV3 · 41 plugins</string>
 </resources>

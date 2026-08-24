@@ -19,9 +19,10 @@ fun main(args: Array<String>) = runBlocking {
     val session = CliSession(settings)
     println("""
 +==================================================+
-|  Mr Scanner Omega  v2.0.0-omega                  |
+|  Mr. Scanner Ω  v2.0.0-omega                     |
 |  ConfidenceEngineV3 · 41-plugin architecture     |
-|  Engine: log-odds evidence · DAG · BudgetGuard   |
+|  Engine: Confidence v3 (symmetric log-odds)      |
+|  Creator: Mr Ali · t.me/Mr_Ali_2025              |
 +==================================================+
 """.trimIndent())
     if (args.isNotEmpty()) {

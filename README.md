@@ -1,4 +1,4 @@
-# Mr Scanner Ω
+# Mr. Scanner Ω
 
 **Powerful mobile-class network scanner** — ConfidenceEngineV3 · 41-plugin DAG · DPI/bypass research tooling.
 
@@ -130,15 +130,16 @@ QUIC/HTTP3 full path needs Cronet on device (`testQuic` flag). ECH is probe-leve
 
 ## Author
 
-**Mr Ali**  
-- Telegram: [t.me/Mr_Ali_2025](https://t.me/Mr_Ali_2025)  
-- Channel: [t.me/Ali_shortcuts](https://t.me/Ali_shortcuts)  
-- Email: ali.hekmati2026@gmail.com  
-- Social: Facebook `AliShortcuts` · TikTok/IG/YT `ali_shortcuts`
+**Mr Ali**
 
----
+- Telegram: [t.me/Mr_Ali_2025](https://t.me/Mr_Ali_2025)
+- Channel: [t.me/Ali_shortcuts](https://t.me/Ali_shortcuts)
+- Email: [ali.hekmati2026@gmail.com](mailto:ali.hekmati2026@gmail.com)
+- Social: Facebook `AliShortcuts` · TikTok/Instagram/YouTube: `ali_shortcuts`
+
 
 ## License / ethics
 
-Use only on systems you own or are explicitly authorized to test.  
-This software is provided for defensive security research and authorized network audits.
+> Strictly for authorized security research, network audits, and code analysis.
+
+Use only on systems you own or are explicitly authorized to test.
