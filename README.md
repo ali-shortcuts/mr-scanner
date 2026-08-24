@@ -15,18 +15,20 @@
 
 ---
 
-## Download APK
+## Download APK (32-bit + 64-bit)
 
-Prebuilt sideload APK:
+| APK | ABI | Recommended for |
+|---|---|---|
+| [`MrScannerOmega-2.0.0-universal.apk`](dist/MrScannerOmega-2.0.0-universal.apk) | 32+64 | **Default — all phones** |
+| [`MrScannerOmega-2.0.0-arm64-v8a.apk`](dist/MrScannerOmega-2.0.0-arm64-v8a.apk) | 64-bit | Modern phones (2017+) |
+| [`MrScannerOmega-2.0.0-armeabi-v7a.apk`](dist/MrScannerOmega-2.0.0-armeabi-v7a.apk) | 32-bit | Older devices |
 
-- [`dist/MrScannerOmega-2.0.0.apk`](dist/MrScannerOmega-2.0.0.apk)
+Also: CLI zip · full source tarball · [`SPECS.md`](dist/SPECS.md) · [`SHA256SUMS.txt`](dist/SHA256SUMS.txt)  
+GitHub Release: [v2.0.0-omega](https://github.com/ali-shortcuts/mr-scanner/releases/tag/v2.0.0-omega)
 
 ```bash
-adb install -r dist/MrScannerOmega-2.0.0.apk
+adb install -r dist/MrScannerOmega-2.0.0-universal.apk
 ```
-
-Or open the APK on the device (allow unknown sources).  
-SHA256: see [`dist/SHA256SUMS.txt`](dist/SHA256SUMS.txt).
 
 ---
 
