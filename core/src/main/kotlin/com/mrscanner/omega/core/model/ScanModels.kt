@@ -35,3 +35,16 @@ data class CheckpointRecord(
     val completedHosts: MutableList<String> = mutableListOf(),
     val createdAt: Long = System.currentTimeMillis(), var updatedAt: Long = System.currentTimeMillis()
 )
+
+/**
+ * Checkpoint for streaming CIDR scans. Deliberately does NOT keep a
+ * completedHosts list like [CheckpointRecord] — for a /8 that list would be
+ *16M+ strings. A numeric cursor into the range (position `cursor` of
+ * `rangeSpec`) is all that's needed to resume: [com.mrscanner.omega.core.scheduler.CidrRangeEngine.stream]
+ * regenerates addresses on demand from that offset.
+ */
+data class CidrCheckpointRecord(
+    val scanId: String, val rangeSpec: String, val configHash: String,
+    var cursor: Long, val total: Long, var aliveFound: Long = 0,
+    val createdAt: Long = System.currentTimeMillis(), var updatedAt: Long = System.currentTimeMillis()
+)
