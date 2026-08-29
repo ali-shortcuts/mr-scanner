@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="20dp">
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Concurrency (parallel in-flight scans)" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <SeekBar android:id="@+id/seekConcurrency" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:max="4095" android:min="0"/>
+    <TextView android:id="@+id/labelConcurrency" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="#E8F1FF" android:textSize="13sp" android:textStyle="bold"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp"
+        android:text="Ports (comma-separated, max 4)" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <EditText android:id="@+id/inputPorts" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:fontFamily="monospace" android:inputType="text"
+        android:padding="10dp" android:textColor="#E8F1FF" android:textSize="12sp"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp"
+        android:text="Precheck timeout (ms)" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <EditText android:id="@+id/inputTimeout" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:fontFamily="monospace" android:inputType="number"
+        android:padding="10dp" android:textColor="#E8F1FF" android:textSize="12sp"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp"
+        android:text="DNS region" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <EditText android:id="@+id/inputDnsRegion" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:fontFamily="monospace" android:inputType="text"
+        android:padding="10dp" android:textColor="#E8F1FF" android:textSize="12sp"/>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp"
+        android:text="Custom DNS servers (comma-separated, e.g. 1.1.1.1,8.8.8.8)" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <EditText android:id="@+id/inputCustomDns" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="#121A2F" android:fontFamily="monospace" android:inputType="text"
+        android:padding="10dp" android:textColor="#E8F1FF" android:textSize="12sp"/>
+
+</LinearLayout>
+</ScrollView>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:padding="8dp">
+        <Button android:id="@+id/subTabHost" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="4dp" android:backgroundTint="#5B8CFF"
+            android:text="Scan Host" android:textAllCaps="false" android:textSize="12sp"/>
+        <Button android:id="@+id/subTabCidr" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="4dp" android:backgroundTint="#2A3550"
+            android:text="Scan CIDR" android:textAllCaps="false" android:textSize="12sp"/>
+        <Button android:id="@+id/btnScanSettings" android:layout_width="44dp" android:layout_height="wrap_content"
+            android:backgroundTint="#2A3550" android:text="⚙" android:textAllCaps="false"/>
+    </LinearLayout>
+    <FrameLayout android:id="@+id/scanSubContent" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1"/>
+</LinearLayout>

@@ -5,8 +5,14 @@
         android:text="Bulk multi-host scan" android:textColor="#E8F1FF" android:textSize="16sp" android:textStyle="bold"/>
     <EditText android:id="@+id/hostsInput" android:layout_width="match_parent" android:layout_height="110dp"
         android:layout_marginTop="8dp" android:background="#121A2F" android:fontFamily="monospace" android:gravity="top"
-        android:inputType="textMultiLine" android:padding="10dp" android:text="example.com\ncloudflare.com\ngoogle.com"
-        android:textColor="#E8F1FF" android:textSize="12sp"/>
+        android:inputType="textMultiLine" android:padding="10dp" android:hint="one host per line, or load a file"
+        android:textColor="#E8F1FF" android:textColorHint="#556677" android:textSize="12sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
+        <Button android:id="@+id/btnLoadFile" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:backgroundTint="#2A3550" android:text="Load hosts from file…" android:textAllCaps="false" android:textSize="12sp"/>
+    </LinearLayout>
+    <TextView android:id="@+id/loadedFileLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="" android:textColor="#7C8AA8" android:textSize="10sp"/>
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
         <Button android:id="@+id/btnStart" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="6dp"
             android:layout_weight="1" android:backgroundTint="#5B8CFF" android:text="Start" android:textAllCaps="false"/>
