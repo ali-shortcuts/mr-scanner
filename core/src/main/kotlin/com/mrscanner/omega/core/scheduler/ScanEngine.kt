@@ -10,18 +10,24 @@ import com.mrscanner.omega.core.metrics.ScanTiming
 import com.mrscanner.omega.core.model.*
 import com.mrscanner.omega.core.plugin.*
 import com.mrscanner.omega.core.settings.ConsoleSettings
+import com.mrscanner.omega.core.network.TcpConnect
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class ScanEngine(
     val settings: ConsoleSettings = ConsoleSettings(),
     val eventBus: EventBus = EventBus(),
     val holeStore: HoleAgeStore = HoleAgeStore(),
     val checkpointStore: CheckpointStore = CheckpointStore(),
+    val cidrCheckpointStore: CidrCheckpointStore = CidrCheckpointStore(),
     val history: ScanHistoryStore = ScanHistoryStore(),
     var profile: NetworkProfile = NetworkProfile.UNKNOWN,
     val database: OmegaDatabase? = null
@@ -56,7 +62,7 @@ class ScanEngine(
         val targets = hosts.drop(startIndex)
         val plugins = PluginRegistry.createAll(settings)
         val dag = PluginDagExecutor(plugins)
-        val sem = Semaphore(settings.concurrency.coerceIn(1, 64))
+        val sem = Semaphore(settings.concurrency.coerceIn(1, 4096))
         val results = mutableListOf<HostScanResult>()
         val lock = Any()
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "scan=$scanId hosts=${hosts.size} plugins=${plugins.size} profile=$profile budget=${BudgetGuard.forProfile(profile, settings.budgetProfileOverride).budget.label}"))
@@ -93,6 +99,111 @@ class ScanEngine(
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "finished scan=$scanId hosts=${ordered.size} wallMs=$wall"))
         lastMeta[scanId] = Meta(configHash, profile.name, startedAt, Instant.now().toString())
         return ordered
+    }
+
+    data class CidrScanSummary(
+        val scanId: String, val rangeSpec: String, val total: Long,
+        val scanned: Long, val aliveFound: Long, val hits: List<HostScanResult>, val wallMs: Long
+    )
+
+    /**
+     * Streams a CIDR range of any size (see [CidrRangeEngine] — no /24-style
+     * cap) through the scanner without ever materializing the address list.
+     *
+     * Two independently-bounded concurrent stages, chained as flows so at
+     * most `concurrency` addresses are ever "in flight" at once regardless of
+     * how large [range] is:
+     *   1. precheck (cheap TCP connect on [ports]) + rolling per-/24 alias
+     *      dedupe (same 80%-cap heuristic as [AliasPrefixDeduper], applied
+     *      on the fly instead of after materializing a full list)
+     *   2. full DAG scan (all plugins) — only for hosts that passed stage 1
+     *
+     * Progress/checkpoint cadence widen automatically for large ranges via
+     * [CidrRangeEngine.reportCadence] / [checkpointCadence] so a /8 doesn't
+     * flood the event bus or the checkpoint file with millions of writes.
+     * Resuming uses a numeric cursor ([CidrCheckpointRecord]), not a stored
+     * host list, so resume cost doesn't grow with range size either.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun scanCidrRange(
+        range: CidrRangeEngine.Range,
+        scanId: String = UUID.randomUUID().toString().take(8),
+        resume: Boolean = false,
+        ports: List<Int> = settings.scanPorts.ifEmpty { listOf(443, 80) }
+    ): CidrScanSummary {
+        val t0 = System.currentTimeMillis()
+        val configHash = settings.configHash()
+        var startAt = 0L
+        var aliveSoFar = 0L
+        if (resume) {
+            val cp = cidrCheckpointStore.get(scanId)
+            if (cp != null) {
+                if (cp.configHash != configHash) {
+                    eventBus.emit(ScanEvent.LogEmitted("ERROR", "config drift — refuse resume"))
+                    return CidrScanSummary(scanId, range.spec, range.total, 0, 0, emptyList(), 0)
+                }
+                startAt = cp.cursor; aliveSoFar = cp.aliveFound
+                eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "resuming cidr=$scanId @$startAt/${range.total}"))
+            }
+        }
+        val concurrency = CidrRangeEngine.effectiveConcurrency(range.total, settings.concurrency)
+        val reportEvery = CidrRangeEngine.reportCadence(range.total)
+        val checkpointEvery = CidrRangeEngine.checkpointCadence(range.total)
+        eventBus.emit(ScanEvent.LogEmitted("SYSTEM",
+            "cidr=$scanId range=${range.spec} total=${range.total} concurrency=$concurrency ports=$ports"))
+
+        val plugins = PluginRegistry.createAll(settings)
+        val done = AtomicLong(startAt)
+        val alive = AtomicLong(aliveSoFar)
+        val hits = CopyOnWriteArrayList<HostScanResult>()
+        val aliasSeen = ConcurrentHashMap<String, AtomicInteger>()
+        val aliasKept = ConcurrentHashMap<String, AtomicInteger>()
+        val precheckTimeout = settings.precheckTimeoutMs.toInt().coerceAtLeast(200)
+
+        val candidateHosts: Flow<String> = CidrRangeEngine.stream(range, startAt).asFlow()
+            .flatMapMerge(concurrency) { host ->
+                flow {
+                    val d = done.incrementAndGet()
+                    val alivePort = ports.firstOrNull { p -> TcpConnect.isAlive(host, p, precheckTimeout) }
+                    if (d % reportEvery == 0L || d == range.total) {
+                        eventBus.emit(ScanEvent.RangeProgress(scanId, d, range.total, alive.get(), host))
+                    }
+                    if (d % checkpointEvery == 0L) {
+                        cidrCheckpointStore.save(CidrCheckpointRecord(scanId, range.spec, configHash, d, range.total, alive.get()))
+                    }
+                    if (alivePort != null) {
+                        val prefix24 = host.substringBeforeLast(".")
+                        val seen = aliasSeen.getOrPut(prefix24) { AtomicInteger(0) }.incrementAndGet()
+                        val kept = aliasKept.getOrPut(prefix24) { AtomicInteger(0) }
+                        val cap = (seen * 0.80).toInt().coerceAtLeast(1)
+                        if (kept.get() < cap) { kept.incrementAndGet(); emit(host) }
+                    }
+                }
+            }
+
+        candidateHosts
+            .flatMapMerge(concurrency) { host ->
+                flow {
+                    val dag = PluginDagExecutor(plugins)
+                    emit(scanOne(host, dag))
+                }
+            }
+            .collect { result ->
+                alive.incrementAndGet()
+                hits += result
+                applyHole(result.host, result.report.verdict, result.report.confidence)
+                eventBus.emit(ScanEvent.HostVerdict(result.host, result.report,
+                    result.pluginResults.filter { it.signal.polarity != SignalPolarity.ABSTAIN }
+                        .map { "${it.pluginId.substringAfterLast('.')}: ${it.summary}" }))
+            }
+
+        cidrCheckpointStore.save(CidrCheckpointRecord(scanId, range.spec, configHash, range.total, range.total, alive.get()))
+        val wall = System.currentTimeMillis() - t0
+        eventBus.emit(ScanEvent.RangeProgress(scanId, range.total, range.total, alive.get(), null))
+        eventBus.emit(ScanEvent.ScanFinished(scanId, hits.size, wall))
+        eventBus.emit(ScanEvent.LogEmitted("SYSTEM",
+            "finished cidr=$scanId scanned=${range.total - startAt} alive=${alive.get()} wallMs=$wall"))
+        return CidrScanSummary(scanId, range.spec, range.total, range.total - startAt, alive.get(), hits, wall)
     }
 
     suspend fun scanOne(host: String, dag: PluginDagExecutor? = null): HostScanResult {

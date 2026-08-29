@@ -6,10 +6,8 @@ import com.mrscanner.omega.core.metrics.LocalMetricsStore
 import com.mrscanner.omega.core.plugin.*
 import com.mrscanner.omega.core.scheduler.ScanEngine
 import com.mrscanner.omega.core.apkanalyzer.ApkStaticAnalyzer
-import com.mrscanner.omega.core.scheduler.AliasPrefixDeduper
+import com.mrscanner.omega.core.scheduler.CidrRangeEngine
 import com.mrscanner.omega.core.update.UpdateChecker
-import com.mrscanner.omega.core.network.TcpConnect
-import java.net.InetAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
@@ -245,40 +243,62 @@ class MetricsCmd : CliCommand {
 }
 
 class CidrCmd : CliCommand {
-    override val name = "cidr"; override val usage = "cidr <a.b.c.0/24>"; override val help = "Expand CIDR max /24"
-    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
-        val spec = args.positionals.firstOrNull() ?: run { emit(err(usage)); return@flow }
-        val hosts = expand(spec)
-        if (hosts.isEmpty()) { emit(err("bad/too-large cidr (max /24)")); return@flow }
-        emit(sys("expanded ${hosts.size} from $spec"))
-        // Precheck + AliasPrefixDeduper (alive-rate cap 0.80 per /24)
-        val alivePairs = mutableListOf<Pair<String, String>>()
-        for (h in hosts) {
-            val ok = TcpConnect.isAlive(h, 443, session.settings.precheckTimeoutMs.toInt().coerceAtLeast(200))
-            if (ok) {
-                val ip = try { InetAddress.getByName(h).hostAddress ?: h } catch (_: Exception) { h }
-                alivePairs += h to ip
-            }
+    override val name = "cidr"
+    override val usage = "cidr <a.b.c.0/prefix|file> [<more ranges...>] [--resume=id] [--ports=443,80]"
+    override val help = "Stream-scan CIDR range(s) of ANY size (/0-/32) — no host-count cap, streamed not materialized"
+    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = channelFlow {
+        // Ranges can come as direct positionals ("1.2.3.0/16") or as a file
+        // with one CIDR spec (or plain host, treated as /32) per line.
+        val specs = mutableListOf<String>()
+        for (p in args.positionals) {
+            val f = File(p)
+            if (f.isFile) specs += f.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+            else specs += p
         }
-        val deduped = AliasPrefixDeduper.filter(alivePairs, 0.80)
-        emit(sys("precheck alive=${alivePairs.size}/${hosts.size} after-dedupe=${deduped.size}"))
-        val finalHosts = if (deduped.isEmpty()) hosts.take(32) else deduped
-        session.settings.budgetProfileOverride = "CIDR_BULK"
-        FullScanCmd().run(CliArgs(finalHosts, args.flags, finalHosts), session, engine).collect { emit(it) }
-        session.settings.budgetProfileOverride = null
-    }
-    private fun expand(spec: String): List<String> {
-        val parts = spec.split("/"); if (parts.size != 2) return emptyList()
-        val prefix = parts[1].toIntOrNull() ?: return emptyList()
-        if (prefix < 24 || prefix > 32) return emptyList()
-        val ip = parts[0].split(".").mapNotNull { it.toIntOrNull() }; if (ip.size != 4) return emptyList()
-        val hostBits = 32 - prefix; val count = 1 shl hostBits
-        val base = (ip[0] shl 24) or (ip[1] shl 16) or (ip[2] shl 8) or ip[3]
-        val mask = if (hostBits == 0) -1 else -1 shl hostBits
-        val network = base and mask
-        return (0 until count).map { off ->
-            val v = network + off
-            listOf((v ushr 24) and 0xff, (v ushr 16) and 0xff, (v ushr 8) and 0xff, v and 0xff).joinToString(".")
+        if (specs.isEmpty()) { send(err(usage)); return@channelFlow }
+
+        val ports = args.flag("ports")?.split(",")?.mapNotNull { it.trim().toIntOrNull() } ?: session.settings.scanPorts
+        val resumeId = args.flag("resume")
+
+        for (spec in specs) {
+            val normalized = if (!spec.contains("/")) "$spec/32" else spec
+            val range = CidrRangeEngine.parse(normalized)
+            if (range == null) { send(err("bad range: $spec")); continue }
+            if (range.prefix < 8) {
+                send(sys("warning: /${range.prefix} is ${range.total} hosts — this will take a very long time, proceeding anyway (no hard limit)"))
+            }
+            val scanId = resumeId ?: UUID.randomUUID().toString().take(8)
+            session.scanId = scanId
+            send(sys("cidr id=$scanId range=${range.spec} total=${range.total} hash=${session.settings.configHash()}"))
+            session.settings.budgetProfileOverride = "CIDR_BULK"
+            val collector = launch {
+                engine.eventBus.events.collect { ev ->
+                    when (ev) {
+                        is ScanEvent.HostVerdict -> {
+                            send(verd("${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}"))
+                            if (args.bool("confidence", true)) send(out("           | ${ev.report.explanation}"))
+                        }
+                        is ScanEvent.RangeProgress -> {
+                            val pct = if (ev.total == 0L) 0 else (ev.done * 100 / ev.total)
+                            val remaining = ev.total - ev.done
+                            send(CliOutputLine(CliOutputLine.Kind.PROGRESS,
+                                "[$pct%] scanned=${ev.done}/${ev.total} remaining=$remaining alive=${ev.aliveFound} ${ev.currentHost ?: ""}"))
+                        }
+                        is ScanEvent.CheckpointSaved -> send(sys("checkpoint @${ev.cursor}"))
+                        is ScanEvent.LogEmitted -> if (ev.level == "ERROR") send(err(ev.message)) else send(sys(ev.message))
+                        is ScanEvent.BudgetExceeded -> send(sys("budget skip ${ev.host}: ${ev.skippedPlugins.take(5).joinToString()}"))
+                        is ScanEvent.ScanFinished -> send(sys("done wallMs=${ev.wallMs}"))
+                        else -> {}
+                    }
+                }
+            }
+            try {
+                val summary = engine.scanCidrRange(range, scanId, resumeId != null, ports)
+                send(sys("range done: ${summary.rangeSpec} scanned=${summary.scanned} alive=${summary.aliveFound} wallMs=${summary.wallMs}"))
+            } finally {
+                collector.cancel()
+                session.settings.budgetProfileOverride = null
+            }
         }
     }
 }

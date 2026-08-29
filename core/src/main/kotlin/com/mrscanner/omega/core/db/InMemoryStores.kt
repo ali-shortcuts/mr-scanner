@@ -71,6 +71,26 @@ class CheckpointStore(private val persistDir: File? = null) {
     }
 }
 
+/** Companion to [CheckpointStore] but for streaming CIDR scans — see [CidrCheckpointRecord]. */
+class CidrCheckpointStore(private val persistDir: File? = null) {
+    private val map = ConcurrentHashMap<String, CidrCheckpointRecord>()
+    init { persistDir?.mkdirs() }
+    fun save(cp: CidrCheckpointRecord) {
+        cp.updatedAt = System.currentTimeMillis(); map[cp.scanId] = cp
+        val dir = persistDir ?: return
+        File(dir, "cidr-checkpoint-${cp.scanId}.txt").writeText(
+            listOf(cp.scanId, cp.rangeSpec, cp.configHash, cp.cursor, cp.total, cp.aliveFound).joinToString("\t")
+        )
+    }
+    fun get(id: String) = map[id] ?: load(id)
+    fun clear(id: String) { map.remove(id); persistDir?.let { File(it, "cidr-checkpoint-$id.txt").delete() } }
+    private fun load(id: String): CidrCheckpointRecord? {
+        val f = File(persistDir ?: return null, "cidr-checkpoint-$id.txt"); if (!f.exists()) return null
+        val p = f.readText().trim().split("\t"); if (p.size < 6) return null
+        return CidrCheckpointRecord(p[0], p[1], p[2], p[3].toLong(), p[4].toLong(), p[5].toLong()).also { map[id] = it }
+    }
+}
+
 class ScanHistoryStore {
     private val scans = ConcurrentHashMap<String, MutableList<HostScanResult>>()
     fun put(id: String, r: List<HostScanResult>) { scans[id] = r.toMutableList() }

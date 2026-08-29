@@ -4,6 +4,12 @@ import java.security.MessageDigest
 enum class RedactionLevel { NONE, STANDARD, STRICT }
 
 data class ConsoleSettings(
+    // Hard ceiling for concurrency. Not "unlimited" on purpose: past a few
+    // thousand simultaneous sockets you hit OS file-descriptor/thread limits
+    // before you hit any limit in this app, so raising this further just
+    // trades a controlled error for a crash. 4096 is generous headroom over
+    // the old 64 cap; CidrRangeEngine.effectiveConcurrency additionally
+    // scales this down for ranges too small to use it.
     var concurrency: Int = 8,
     var timeoutMs: Long = 5_000,
     var retries: Int = 1,
@@ -14,6 +20,10 @@ data class ConsoleSettings(
     var postCheckMultiplier: Double = 1.5,
     var dnsRegion: String = "global",
     var customDnsServers: List<String> = emptyList(),
+    // Ports probed by tcpconnect/precheck-style plugins. Kept short by design
+    // (3-4 entries) per project convention — a long port list doesn't
+    // improve zero-rating detection, it just multiplies request volume.
+    var scanPorts: List<Int> = listOf(443, 80, 8443),
     var sniSpoofCandidates: List<String> = emptyList(),
     var testFragmentBypass: Boolean = true,
     var testFingerprint: Boolean = false,
@@ -35,16 +45,18 @@ data class ConsoleSettings(
     var enableActiveInjectionProbes: Boolean = true
 ) {
     fun configHash(): String {
-        val s = "c=$concurrency|t=$timeoutMs|r=$retries|pre=$precheckTimeoutMs|dedup=$dedupByIp|dns=$dnsRegion|frag=$testFragmentBypass|ech=$testEch|quic=$testQuic|cdn=$testCdnEdge|alpn=$testAlpnMatrix|dot=$testDnsTransport|splits=${recordFragmentSplits.joinToString(",")}|deep=$deepScan|customDns=${customDnsServers.sorted().joinToString(",")}|sni=${sniSpoofCandidates.sorted().joinToString(",")}"
+        val s = "c=$concurrency|t=$timeoutMs|r=$retries|pre=$precheckTimeoutMs|dedup=$dedupByIp|dns=$dnsRegion|frag=$testFragmentBypass|ech=$testEch|quic=$testQuic|cdn=$testCdnEdge|alpn=$testAlpnMatrix|dot=$testDnsTransport|splits=${recordFragmentSplits.joinToString(",")}|deep=$deepScan|customDns=${customDnsServers.sorted().joinToString(",")}|sni=${sniSpoofCandidates.sorted().joinToString(",")}|ports=${scanPorts.joinToString(",")}"
         return MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
     }
     fun setKey(key: String, value: String): Boolean {
         return try {
             when (key.lowercase()) {
-                "concurrency" -> concurrency = value.toInt().coerceIn(1, 64)
+                "concurrency" -> concurrency = value.toInt().coerceIn(1, 4096)
                 "timeoutms", "timeout" -> timeoutMs = value.toLong().coerceIn(200, 120_000)
                 "retries" -> retries = value.toInt().coerceIn(0, 5)
                 "dnsregion", "dns_region" -> dnsRegion = value
+                "ports", "scanports" -> scanPorts = value.split(",").mapNotNull { it.trim().toIntOrNull() }.take(4)
+                "customdns", "customdnsservers" -> customDnsServers = value.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 "testfragmentbypass", "fragment" -> testFragmentBypass = value.toBooleanStrict()
                 "testech", "ech" -> testEch = value.toBooleanStrict()
                 "testquic", "quic" -> testQuic = value.toBooleanStrict()
@@ -61,7 +73,7 @@ data class ConsoleSettings(
     }
 
     fun snapshotLines() = listOf(
-        "concurrency=$concurrency", "timeoutMs=$timeoutMs", "retries=$retries", "dnsRegion=$dnsRegion",
+        "concurrency=$concurrency", "timeoutMs=$timeoutMs", "retries=$retries", "dnsRegion=$dnsRegion", "scanPorts=$scanPorts",
         "testFragmentBypass=$testFragmentBypass", "testEch=$testEch", "testQuic=$testQuic",
         "testCdnEdge=$testCdnEdge", "testAlpnMatrix=$testAlpnMatrix", "testDnsTransport=$testDnsTransport",
         "deepScan=$deepScan", "dedupByIp=$dedupByIp", "recordFragmentSplits=$recordFragmentSplits",
