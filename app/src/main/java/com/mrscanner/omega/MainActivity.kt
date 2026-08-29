@@ -14,7 +14,9 @@ import android.widget.ImageView
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
@@ -26,6 +28,7 @@ import com.mrscanner.omega.core.eventbus.ScanEvent
 import com.mrscanner.omega.core.plugin.PluginRegistry
 import com.mrscanner.omega.core.plugin.SignalPolarity
 import com.mrscanner.omega.core.plugin.Verdict
+import com.mrscanner.omega.core.scheduler.CidrRangeEngine
 import com.mrscanner.omega.network.AndroidNetworkProfile
 import com.mrscanner.omega.core.update.UpdateChecker
 import com.mrscanner.omega.core.apkanalyzer.ApkStaticAnalyzer
@@ -49,9 +52,16 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var content: FrameLayout
     private var scanJob: Job? = null
+    private var cidrJob: Job? = null
+    private var termGlobalCollector: Job? = null
     private var termBusy = false
     private var apkPickPath: String? = null
+    private var scanSubMode = 0 // 0 = host, 1 = cidr
+    private var pendingHostsField: EditText? = null
+    private var pendingCidrField: EditText? = null
     private val reqPickApk = 4401
+    private val reqPickHostFile = 4402
+    private val reqPickCidrFile = 4403
     private val tabButtons = mutableListOf<Button>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -111,6 +121,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        termGlobalCollector?.cancel()
+        cidrJob?.cancel()
         scope.cancel()
     }
 
@@ -126,6 +138,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun inflate(layout: Int): View {
+        if (layout != R.layout.fragment_terminal) {
+            termGlobalCollector?.cancel(); termGlobalCollector = null
+        }
         content.removeAllViews()
         return layoutInflater.inflate(layout, content, true)
     }
@@ -189,14 +204,84 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun inflateInto(container: FrameLayout, layout: Int): View {
+        container.removeAllViews()
+        return layoutInflater.inflate(layout, container, true)
+    }
+
     private fun showScan() {
-        val root = inflate(R.layout.fragment_scan)
+        val root = inflate(R.layout.fragment_scan_shell)
+        val subHost = root.findViewById<Button>(R.id.subTabHost)
+        val subCidr = root.findViewById<Button>(R.id.subTabCidr)
+        val settingsBtn = root.findViewById<Button>(R.id.btnScanSettings)
+        val sub = root.findViewById<FrameLayout>(R.id.scanSubContent)
+
+        fun selectSub(mode: Int) {
+            scanSubMode = mode
+            subHost.backgroundTintList = ContextCompat.getColorStateList(this, if (mode == 0) R.color.omega_primary else R.color.omega_primary_dim)
+            subCidr.backgroundTintList = ContextCompat.getColorStateList(this, if (mode == 1) R.color.omega_primary else R.color.omega_primary_dim)
+            if (mode == 0) showScanHost(sub) else showScanCidr(sub)
+        }
+        subHost.setOnClickListener { selectSub(0) }
+        subCidr.setOnClickListener { selectSub(1) }
+        settingsBtn.setOnClickListener { showScanSettingsDialog() }
+        selectSub(scanSubMode)
+    }
+
+    private fun showScanSettingsDialog() {
+        val v = layoutInflater.inflate(R.layout.dialog_scan_settings, null)
+        val seek = v.findViewById<SeekBar>(R.id.seekConcurrency)
+        val label = v.findViewById<TextView>(R.id.labelConcurrency)
+        val ports = v.findViewById<EditText>(R.id.inputPorts)
+        val timeout = v.findViewById<EditText>(R.id.inputTimeout)
+        val dnsRegion = v.findViewById<EditText>(R.id.inputDnsRegion)
+        val customDns = v.findViewById<EditText>(R.id.inputCustomDns)
+        val settings = OmegaApp.instance.settings
+
+        fun renderConcurrency(c: Int) { label.text = "concurrency = $c  (ceiling 4096 — higher risks socket/thread exhaustion, not more throughput)" }
+        seek.progress = settings.concurrency
+        renderConcurrency(settings.concurrency)
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) { renderConcurrency(value.coerceAtLeast(1)) }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        ports.setText(settings.scanPorts.joinToString(","))
+        timeout.setText(settings.precheckTimeoutMs.toString())
+        dnsRegion.setText(settings.dnsRegion)
+        customDns.setText(settings.customDnsServers.joinToString(","))
+
+        AlertDialog.Builder(this)
+            .setTitle("Scan settings")
+            .setView(v)
+            .setPositiveButton("Save") { _, _ ->
+                settings.concurrency = (seek.progress.coerceAtLeast(1))
+                settings.setKey("ports", ports.text.toString())
+                timeout.text.toString().toLongOrNull()?.let { settings.precheckTimeoutMs = it.coerceIn(200, 60_000) }
+                dnsRegion.text.toString().takeIf { it.isNotBlank() }?.let { settings.dnsRegion = it }
+                settings.customDnsServers = customDns.text.toString().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                Toast.makeText(this, "Settings saved · configHash=${settings.configHash().take(8)}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showScanHost(container: FrameLayout) {
+        val root = inflateInto(container, R.layout.fragment_scan_host)
         val hostsInput = root.findViewById<EditText>(R.id.hostsInput)
+        val loadBtn = root.findViewById<Button>(R.id.btnLoadFile)
+        val loadedLabel = root.findViewById<TextView>(R.id.loadedFileLabel)
         val btnStart = root.findViewById<Button>(R.id.btnStart)
         val btnStop = root.findViewById<Button>(R.id.btnStop)
         val bar = root.findViewById<ProgressBar>(R.id.scanProgress)
         val status = root.findViewById<TextView>(R.id.scanStatus)
         val results = root.findViewById<TextView>(R.id.results)
+
+        loadBtn.setOnClickListener {
+            pendingHostsField = hostsInput
+            openFilePicker(reqPickHostFile)
+        }
+        loadedLabel.text = ""
 
         btnStop.setOnClickListener {
             scanJob?.cancel()
@@ -213,7 +298,6 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = false
             results.text = ""
             status.text = "Scanning ${hosts.size}…"
-            // Prefer cellular path when available (zero-rate / operator view)
             val bind = CellularNetworkBinder.bindToCellular(this@MainActivity)
             if (bind.bound) status.text = "Scanning ${hosts.size}… [${bind.detail}]"
             OmegaApp.instance.promoteScanService()
@@ -224,9 +308,7 @@ class MainActivity : AppCompatActivity() {
                     engine.eventBus.events.collect { ev ->
                         when (ev) {
                             is ScanEvent.HostVerdict -> {
-                                results.append(
-                                    "${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}\n"
-                                )
+                                results.append("${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}\n")
                             }
                             is ScanEvent.Progress -> {
                                 bar.progress = if (ev.total == 0) 0 else ev.done * 100 / ev.total
@@ -253,12 +335,95 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showScanCidr(container: FrameLayout) {
+        val root = inflateInto(container, R.layout.fragment_scan_cidr)
+        val cidrInput = root.findViewById<EditText>(R.id.cidrInput)
+        val loadBtn = root.findViewById<Button>(R.id.btnLoadCidrFile)
+        val loadedLabel = root.findViewById<TextView>(R.id.loadedCidrFileLabel)
+        val btnStart = root.findViewById<Button>(R.id.btnCidrStart)
+        val btnStop = root.findViewById<Button>(R.id.btnCidrStop)
+        val bar = root.findViewById<ProgressBar>(R.id.cidrProgress)
+        val status = root.findViewById<TextView>(R.id.cidrStatus)
+        val results = root.findViewById<TextView>(R.id.cidrResults)
+
+        loadBtn.setOnClickListener {
+            pendingCidrField = cidrInput
+            openFilePicker(reqPickCidrFile)
+        }
+        loadedLabel.text = ""
+
+        btnStop.setOnClickListener {
+            cidrJob?.cancel()
+            status.text = "Cancelled"
+            btnStart.isEnabled = true
+        }
+        btnStart.setOnClickListener {
+            val specs = cidrInput.text?.toString().orEmpty().lines()
+                .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.distinct()
+            if (specs.isEmpty()) { status.text = "No ranges"; return@setOnClickListener }
+            val ranges = specs.mapNotNull { s -> CidrRangeEngine.parse(if (!s.contains("/")) "$s/32" else s) }
+            if (ranges.isEmpty()) { status.text = "No valid ranges (a.b.c.d/prefix)"; return@setOnClickListener }
+            btnStart.isEnabled = false
+            results.text = ""
+            val totalAll = ranges.sumOf { it.total }
+            status.text = "Scanning ${ranges.size} range(s), $totalAll host(s) total…"
+            val bind = CellularNetworkBinder.bindToCellular(this@MainActivity)
+            OmegaApp.instance.promoteScanService()
+            bar.progress = 0
+            cidrJob = scope.launch {
+                val engine = OmegaApp.instance.engine
+                val collector = launch {
+                    engine.eventBus.events.collect { ev ->
+                        when (ev) {
+                            is ScanEvent.HostVerdict -> {
+                                results.append("${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}\n")
+                            }
+                            is ScanEvent.RangeProgress -> {
+                                val pct = if (ev.total == 0L) 0 else (ev.done * 100 / ev.total).toInt()
+                                bar.progress = pct
+                                status.text = "[$pct%] scanned=${ev.done}/${ev.total} remaining=${ev.total - ev.done} alive=${ev.aliveFound}"
+                            }
+                            is ScanEvent.ScanFinished -> {
+                                status.text = "Done · ${ev.wallMs}ms · id=${ev.scanId}"
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+                try {
+                    for (range in ranges) engine.scanCidrRange(range)
+                } catch (e: Exception) {
+                    status.text = "Error: ${e.message}"
+                } finally {
+                    collector.cancel()
+                    OmegaApp.instance.stopScanService()
+                    if (bind.bound) CellularNetworkBinder.clearBind(this@MainActivity)
+                    btnStart.isEnabled = true
+                }
+            }
+        }
+    }
+
+    private fun openFilePicker(requestCode: Int) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "text/*", "*/*"))
+        }
+        try {
+            startActivityForResult(intent, requestCode)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No file picker: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showTerminal() {
         val root = inflate(R.layout.fragment_terminal)
         val out = root.findViewById<TextView>(R.id.termOut)
         val input = root.findViewById<EditText>(R.id.termIn)
         val btn = root.findViewById<Button>(R.id.btnRun)
         val scroll = root.findViewById<ScrollView>(R.id.termScroll)
+        val liveStatus = root.findViewById<TextView>(R.id.termLiveStatus)
         val session = CliSession(settings = OmegaApp.instance.settings)
         val interpreter = CliInterpreter(CommandFactory.defaultRegistry(), OmegaApp.instance.engine)
 
@@ -293,6 +458,40 @@ class MainActivity : AppCompatActivity() {
         btn.setOnClickListener { runCmd(input.text?.toString().orEmpty()) }
         input.setOnEditorActionListener { _, _, _ ->
             runCmd(input.text?.toString().orEmpty()); true
+        }
+
+        // Live global feed: whatever scan is running — from Home, Scan Host,
+        // Scan CIDR, or a CLI command typed right here — shows up on this
+        // screen while it's open, since all of them emit through the same
+        // shared engine.eventBus. Percentage/found/remaining update the
+        // compact status line above; verdicts and log lines scroll below.
+        termGlobalCollector?.cancel()
+        termGlobalCollector = scope.launch {
+            OmegaApp.instance.engine.eventBus.events.collect { ev ->
+                when (ev) {
+                    is ScanEvent.RangeProgress -> {
+                        liveStatus.isVisible = true
+                        val pct = if (ev.total == 0L) 0 else (ev.done * 100 / ev.total)
+                        liveStatus.text = "[${ev.scanId}] ${pct}% · scanned ${ev.done}/${ev.total} · remaining ${ev.total - ev.done} · found ${ev.aliveFound}" +
+                            (ev.currentHost?.let { "  → $it" } ?: "")
+                    }
+                    is ScanEvent.Progress -> {
+                        liveStatus.isVisible = true
+                        val pct = if (ev.total == 0) 0 else (ev.done * 100 / ev.total)
+                        liveStatus.text = "${pct}% · scanned ${ev.done}/${ev.total}" + (ev.host?.let { "  → $it" } ?: "")
+                    }
+                    is ScanEvent.HostVerdict -> append(CliOutputLine.Kind.VERDICT,
+                        "${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}")
+                    is ScanEvent.CheckpointSaved -> append(CliOutputLine.Kind.SYSTEM, "checkpoint saved @${ev.cursor} (scan ${ev.scanId})")
+                    is ScanEvent.BudgetExceeded -> append(CliOutputLine.Kind.SYSTEM, "budget skip ${ev.host}: ${ev.skippedPlugins.take(4).joinToString()}")
+                    is ScanEvent.LogEmitted -> append(if (ev.level == "ERROR") CliOutputLine.Kind.STDERR else CliOutputLine.Kind.SYSTEM, ev.message)
+                    is ScanEvent.ScanFinished -> {
+                        liveStatus.isVisible = false
+                        append(CliOutputLine.Kind.SYSTEM, "finished · id=${ev.scanId} · hosts=${ev.hostCount} · ${ev.wallMs}ms")
+                    }
+                    else -> {}
+                }
+            }
         }
     }
 
@@ -343,20 +542,39 @@ class MainActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != reqPickApk || resultCode != Activity.RESULT_OK) return
+        if (resultCode != Activity.RESULT_OK) return
         val uri = data?.data ?: return
-        scope.launch {
-            try {
-                val name = queryDisplayName(uri) ?: "picked.apk"
-                val out = File(cacheDir, "analyze-$name")
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(out).use { output -> input.copyTo(output) }
+        when (requestCode) {
+            reqPickApk -> {
+                scope.launch {
+                    try {
+                        val name = queryDisplayName(uri) ?: "picked.apk"
+                        val out = File(cacheDir, "analyze-$name")
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(out).use { output -> input.copyTo(output) }
+                        }
+                        apkPickPath = out.absolutePath
+                        showApk()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, "Failed to read APK: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
-                apkPickPath = out.absolutePath
-                // refresh if on apk tab
-                showApk()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Failed to read APK: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+            reqPickHostFile, reqPickCidrFile -> {
+                try {
+                    val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+                    val name = queryDisplayName(uri) ?: "file"
+                    if (requestCode == reqPickHostFile) {
+                        pendingHostsField?.setText(lines.joinToString("\n"))
+                        Toast.makeText(this, "Loaded ${lines.size} host(s) from $name", Toast.LENGTH_SHORT).show()
+                    } else {
+                        pendingCidrField?.setText(lines.joinToString("\n"))
+                        Toast.makeText(this, "Loaded ${lines.size} range(s) from $name", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Failed to read file: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

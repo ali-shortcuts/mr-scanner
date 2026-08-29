@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="CIDR range scan — no size limit (/0-/32), streamed" android:textColor="#E8F1FF" android:textSize="16sp" android:textStyle="bold"/>
+    <EditText android:id="@+id/cidrInput" android:layout_width="match_parent" android:layout_height="90dp"
+        android:layout_marginTop="8dp" android:background="#121A2F" android:fontFamily="monospace" android:gravity="top"
+        android:inputType="textMultiLine" android:padding="10dp" android:hint="10.0.0.0/16\none range per line, or load a file"
+        android:textColor="#E8F1FF" android:textColorHint="#556677" android:textSize="12sp"/>
+    <Button android:id="@+id/btnLoadCidrFile" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:backgroundTint="#2A3550" android:text="Load ranges from file…" android:textAllCaps="false" android:textSize="12sp"/>
+    <TextView android:id="@+id/loadedCidrFileLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="" android:textColor="#7C8AA8" android:textSize="10sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+        <Button android:id="@+id/btnCidrStart" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="6dp"
+            android:layout_weight="1" android:backgroundTint="#5B8CFF" android:text="Start" android:textAllCaps="false"/>
+        <Button android:id="@+id/btnCidrStop" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.6"
+            android:backgroundTint="#2A3550" android:text="Stop" android:textAllCaps="false"/>
+    </LinearLayout>
+    <ProgressBar android:id="@+id/cidrProgress" style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:max="100"/>
+    <TextView android:id="@+id/cidrStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:fontFamily="monospace" android:text="Ready" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="8dp" android:layout_weight="1">
+        <TextView android:id="@+id/cidrResults" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="#070B14" android:fontFamily="monospace" android:padding="10dp" android:textColor="#E8F1FF" android:textSize="11sp"/>
+    </ScrollView>
+</LinearLayout>
