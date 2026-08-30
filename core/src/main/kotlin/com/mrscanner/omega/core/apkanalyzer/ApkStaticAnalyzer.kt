@@ -203,8 +203,9 @@ object ApkStaticAnalyzer {
             }
         }
 
-        if (m?.minSdk != null && m.minSdk < 21) {
-            findings += Finding("LOW", "low-minsdk", "minSdkVersion is low (${m.minSdk}) - wider legacy TLS/crypto attack surface", "")
+        val minSdkVal = m?.minSdk
+        if (minSdkVal != null && minSdkVal < 21) {
+            findings += Finding("LOW", "low-minsdk", "minSdkVersion is low ($minSdkVal) - wider legacy TLS/crypto attack surface", "")
         }
 
         val dexSummary = if (dexFileCount > 0) DexSummary(dexFileCount, dexClasses, dexMethods, dexStrings) else null
