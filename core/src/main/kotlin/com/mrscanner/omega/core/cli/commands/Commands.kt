@@ -68,7 +68,7 @@ class FullScanCmd : CliCommand {
                     }
                     is ScanEvent.Progress -> {
                         val pct = if (ev.total == 0) 0 else ev.done * 100 / ev.total
-                        send(CliOutputLine(CliOutputLine.Kind.PROGRESS, "[$pct%] ${ev.done}/${ev.total} ${ev.host ?: ""}"))
+                        send(CliOutputLine(CliOutputLine.Kind.PROGRESS, "[$pct%] scanned=${ev.done}/${ev.total} found=${ev.foundCount} ${ev.host ?: ""}"))
                     }
                     is ScanEvent.CheckpointSaved -> send(sys("checkpoint @${ev.cursor}"))
                     is ScanEvent.LogEmitted -> if (ev.level == "ERROR") send(err(ev.message))
