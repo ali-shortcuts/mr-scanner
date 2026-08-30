@@ -10,6 +10,7 @@ import com.mrscanner.omega.core.scheduler.CidrRangeEngine
 import com.mrscanner.omega.core.update.UpdateChecker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.io.File
@@ -77,7 +78,10 @@ class FullScanCmd : CliCommand {
                 }
             }
         }
-        try { engine.scanHosts(hosts, scanId, args.flag("resume") != null) } finally { collector.cancel() }
+        try {
+            engine.eventBus.subscriberCount.first { it >= 1 }
+            engine.scanHosts(hosts, scanId, args.flag("resume") != null)
+        } finally { collector.cancel() }
         send(sys("export: export $scanId"))
     }
 }
@@ -293,6 +297,7 @@ class CidrCmd : CliCommand {
                 }
             }
             try {
+                engine.eventBus.subscriberCount.first { it >= 1 }
                 val summary = engine.scanCidrRange(range, scanId, resumeId != null, ports)
                 send(sys("range done: ${summary.rangeSpec} scanned=${summary.scanned} alive=${summary.aliveFound} wallMs=${summary.wallMs}"))
             } finally {

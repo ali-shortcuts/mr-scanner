@@ -42,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -322,6 +323,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 try {
+                    engine.eventBus.subscriberCount.first { it >= 1 }
                     engine.scanHosts(hosts)
                 } catch (e: Exception) {
                     status.text = "Error: ${e.message}"
@@ -391,6 +393,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 try {
+                    engine.eventBus.subscriberCount.first { it >= 1 }
                     for (range in ranges) engine.scanCidrRange(range)
                 } catch (e: Exception) {
                     status.text = "Error: ${e.message}"

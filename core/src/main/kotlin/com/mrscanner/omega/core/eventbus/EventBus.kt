@@ -20,6 +20,10 @@ sealed class ScanEvent {
 class EventBus {
     private val _events = MutableSharedFlow<ScanEvent>(extraBufferCapacity = 256)
     val events = _events.asSharedFlow()
+    /** Callers that launch a collector and then immediately start emitting can
+     * `subscriberCount.first { it >= 1 }` first — SharedFlow has no replay, so
+     * an emit before the collector actually subscribes is silently lost. */
+    val subscriberCount get() = _events.subscriptionCount
     suspend fun emit(e: ScanEvent) { _events.emit(e) }
     fun tryEmit(e: ScanEvent) = _events.tryEmit(e)
 }
