@@ -46,8 +46,7 @@ class ScanEngine(
         val t0 = System.currentTimeMillis()
         val startedAt = Instant.now().toString()
         val configHash = settings.configHash()
-        var startIndex = 0
-        val completed = mutableListOf<String>()
+        val completedSet = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         if (resume) {
             val cp = loadCheckpoint(scanId)
             if (cp != null) {
@@ -55,46 +54,59 @@ class ScanEngine(
                     eventBus.emit(ScanEvent.LogEmitted("ERROR", "config drift — refuse resume"))
                     return emptyList()
                 }
-                startIndex = cp.cursorIndex; completed += cp.completedHosts
-                eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "resuming $scanId @$startIndex"))
+                completedSet.addAll(cp.completedHosts)
+                eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "resuming $scanId @${completedSet.size}/${hosts.size}"))
             }
         }
-        val targets = hosts.drop(startIndex)
+        // Filter by membership rather than the old hosts.drop(startIndex): completion order
+        // under concurrent scanning was never guaranteed to match list order, so an index
+        // cursor could under- or over-skip on resume. A completed-set is exact either way.
+        val targets = hosts.filterNot { it in completedSet }
         val plugins = PluginRegistry.createAll(settings)
-        val dag = PluginDagExecutor(plugins)
-        val sem = Semaphore(settings.concurrency.coerceIn(1, 4096))
-        val results = mutableListOf<HostScanResult>()
-        val lock = Any()
+        val concurrency = settings.concurrency.coerceIn(1, 4096)
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "scan=$scanId hosts=${hosts.size} plugins=${plugins.size} profile=$profile budget=${BudgetGuard.forProfile(profile, settings.budgetProfileOverride).budget.label}"))
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "configHash=$configHash"))
-        var budgetExceeded = 0
-        coroutineScope {
-            targets.map { host ->
-                async(Dispatchers.IO) {
-                    sem.withPermit {
-                        val result = scanOne(host, dag)
-                        synchronized(lock) { results += result; completed += host }
-                        applyHole(host, result.report.verdict, result.report.confidence)
-                        eventBus.emit(ScanEvent.HostVerdict(host, result.report,
-                            result.pluginResults.filter { it.signal.polarity != SignalPolarity.ABSTAIN }
-                                .map { "${it.pluginId.substringAfterLast('.')}: ${it.summary}" }))
-                        val n = synchronized(lock) { completed.size }
-                        eventBus.emit(ScanEvent.Progress(n, hosts.size, host))
-                        if (n % settings.checkpointEveryNHosts == 0 || n == hosts.size) {
-                            val cp = CheckpointRecord(scanId, configHash = configHash, cursorIndex = completed.size, totalHosts = hosts.size, completedHosts = completed.toMutableList())
-                            saveCheckpoint(cp)
-                            eventBus.emit(ScanEvent.CheckpointSaved(scanId, cp.cursorIndex))
-                        }
-                        result
-                    }
+
+        val doneCount = java.util.concurrent.atomic.AtomicInteger(completedSet.size)
+        val foundCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val results = java.util.concurrent.CopyOnWriteArrayList<HostScanResult>()
+        val checkpointEvery = settings.checkpointEveryNHosts.coerceAtLeast(1)
+
+        // Streamed with bounded concurrency (flatMapMerge) instead of the old
+        // `targets.map { async { ... } }.awaitAll()`, which launched every host as
+        // a coroutine up front regardless of list size — fine for a few hundred
+        // hosts, not for a multi-million-line file.
+        targets.asFlow()
+            .flatMapMerge(concurrency) { host ->
+                flow {
+                    val dag = PluginDagExecutor(plugins)
+                    emit(scanOne(host, dag))
                 }
-            }.awaitAll()
-        }
-        val ordered = hosts.mapNotNull { h -> results.find { it.host == h } }
+            }
+            .collect { result ->
+                val host = result.host
+                results += result
+                completedSet += host
+                applyHole(host, result.report.verdict, result.report.confidence)
+                if (result.report.verdict == Verdict.CONFIRMED_CANDIDATE) foundCount.incrementAndGet()
+                eventBus.emit(ScanEvent.HostVerdict(host, result.report,
+                    result.pluginResults.filter { it.signal.polarity != SignalPolarity.ABSTAIN }
+                        .map { "${it.pluginId.substringAfterLast('.')}: ${it.summary}" }))
+                val n = doneCount.incrementAndGet()
+                eventBus.emit(ScanEvent.Progress(n, hosts.size, host, foundCount.get()))
+                if (n % checkpointEvery == 0 || n == hosts.size) {
+                    val cp = CheckpointRecord(scanId, configHash = configHash, cursorIndex = n, totalHosts = hosts.size, completedHosts = completedSet.toMutableList())
+                    saveCheckpoint(cp)
+                    eventBus.emit(ScanEvent.CheckpointSaved(scanId, cp.cursorIndex))
+                }
+            }
+
+        val byHost = results.associateBy { it.host }
+        val ordered = hosts.mapNotNull { h -> byHost[h] }
         history.put(scanId, ordered)
         val wall = System.currentTimeMillis() - t0
         val counts = ordered.groupingBy { it.report.verdict.name }.eachCount()
-        LocalMetricsStore.recordScan(ScanTiming(scanId, profile.name, ordered.size, wall, counts, budgetExceeded))
+        LocalMetricsStore.recordScan(ScanTiming(scanId, profile.name, ordered.size, wall, counts, 0))
         eventBus.emit(ScanEvent.ScanFinished(scanId, ordered.size, wall))
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "finished scan=$scanId hosts=${ordered.size} wallMs=$wall"))
         lastMeta[scanId] = Meta(configHash, profile.name, startedAt, Instant.now().toString())

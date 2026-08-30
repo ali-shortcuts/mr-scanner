@@ -313,7 +313,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             is ScanEvent.Progress -> {
                                 bar.progress = if (ev.total == 0) 0 else ev.done * 100 / ev.total
-                                status.text = "${ev.done}/${ev.total} ${ev.host ?: ""}"
+                                status.text = "scanned ${ev.done}/${ev.total} · found ${ev.foundCount}" + (ev.host?.let { "  → $it" } ?: "")
                             }
                             is ScanEvent.ScanFinished -> {
                                 status.text = "Done ${ev.hostCount} hosts · ${ev.wallMs}ms · id=${ev.scanId}"
@@ -481,7 +481,7 @@ class MainActivity : AppCompatActivity() {
                     is ScanEvent.Progress -> {
                         liveStatus.isVisible = true
                         val pct = if (ev.total == 0) 0 else (ev.done * 100 / ev.total)
-                        liveStatus.text = "${pct}% · scanned ${ev.done}/${ev.total}" + (ev.host?.let { "  → $it" } ?: "")
+                        liveStatus.text = "${pct}% · scanned ${ev.done}/${ev.total} · found ${ev.foundCount}" + (ev.host?.let { "  → $it" } ?: "")
                     }
                     is ScanEvent.HostVerdict -> append(CliOutputLine.Kind.VERDICT,
                         "${mark(ev.report.verdict)} ${ev.host}  conf=${"%.2f".format(ev.report.confidence)}  ${ev.report.verdict}")

@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 sealed class ScanEvent {
     data class LogEmitted(val level: String, val message: String, val ts: Long = System.currentTimeMillis()) : ScanEvent()
-    data class Progress(val done: Int, val total: Int, val host: String?) : ScanEvent()
+    /** [foundCount] = hosts scanned so far whose verdict is CONFIRMED_CANDIDATE — the "found" count shown live, matching [RangeProgress]. */
+    data class Progress(val done: Int, val total: Int, val host: String?, val foundCount: Int = 0) : ScanEvent()
     /** Same as [Progress] but Long-safe for CIDR ranges beyond Int.MAX_VALUE (/0, /1), and carries a running alive count. */
     data class RangeProgress(val scanId: String, val done: Long, val total: Long, val aliveFound: Long, val currentHost: String?) : ScanEvent()
     data class HostVerdict(val host: String, val report: ConfidenceReport, val summaries: List<String> = emptyList()) : ScanEvent()
