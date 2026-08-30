@@ -39,7 +39,7 @@ class ApkStaticAnalyzerTest {
      * Real end-to-end check against this project's own built APK (checked
      * into dist/) - not synthetic bytes. This is what caught the false
      * "unsigned" positive during development: a v2/v3-signed APK has zero
-     * META-INF/*.RSA files, which the old analyzer treated as unsigned.
+     * META-INF *.RSA files, which the old analyzer treated as unsigned.
      */
     @Test
     fun analyzesRealProjectApk() {

@@ -11,11 +11,11 @@ import java.util.Locale
 /**
  * Real signature inspection — this fixes a concrete false-positive found
  * while building this feature: the old analyzer only checked for
- * META-INF/*.RSA|DSA|EC files (the legacy v1/jar signing scheme) and
+ * *.RSA, *.DSA, *.EC files under META-INF (the legacy v1/jar signing scheme) and
  * reported "no signature found" for any APK that ONLY uses APK Signature
  * Scheme v2/v3 — which is the DEFAULT for any APK built with a current
  * Android Gradle Plugin. Verified against this project's own release
- * build in dist/: it is v2-signed and has zero META-INF/*.RSA files, so
+ * build in dist/: it is v2-signed and has zero *.RSA files under META-INF, so
  * the old logic would have wrongly flagged Ali's own signed release APK
  * as unsigned.
  */
@@ -36,7 +36,7 @@ object SignatureInspector {
         val isSigned: Boolean get() = v1Certs.isNotEmpty() || v2SchemeMarkerFound || v3SchemeMarkerFound || signingBlockMagicFound
     }
 
-    /** [v1SigBlocks] = raw bytes of each META-INF/*.RSA|DSA|EC entry found while walking the zip. */
+    /** [v1SigBlocks] = raw bytes of each *.RSA, *.DSA, *.EC entry under META-INF found while walking the zip. */
     fun inspect(apkFile: File, v1SigBlocks: List<ByteArray>): SignatureReport {
         val certs = v1SigBlocks.flatMap { parsePkcs7Certs(it) }
         val (v2, v3, magic) = scanSigningBlockMarkers(apkFile)
