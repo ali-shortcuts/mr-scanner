@@ -42,6 +42,10 @@ data class ConsoleSettings(
     var selfTestOnFirstRun: Boolean = true,
     var deepScan: Boolean = true,
     var operatorHint: String? = "af",
+    /** Detected SIM/network operator, "412-20" form (see SimOperatorDetector / AfghanOperators).
+     * Drives per-operator DNS resolver ranking in DnsPerformanceStore — null disables it (falls
+     * back to the static region list, same as before this existed). */
+    var detectedOperatorKey: String? = null,
     var enableActiveInjectionProbes: Boolean = true
 ) {
     fun configHash(): String {
@@ -57,6 +61,7 @@ data class ConsoleSettings(
                 "dnsregion", "dns_region" -> dnsRegion = value
                 "ports", "scanports" -> scanPorts = value.split(",").mapNotNull { it.trim().toIntOrNull() }.take(4)
                 "customdns", "customdnsservers" -> customDnsServers = value.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                "operator", "detectedoperatorkey" -> detectedOperatorKey = value.trim().ifEmpty { null }
                 "testfragmentbypass", "fragment" -> testFragmentBypass = value.toBooleanStrict()
                 "testech", "ech" -> testEch = value.toBooleanStrict()
                 "testquic", "quic" -> testQuic = value.toBooleanStrict()
@@ -74,6 +79,7 @@ data class ConsoleSettings(
 
     fun snapshotLines() = listOf(
         "concurrency=$concurrency", "timeoutMs=$timeoutMs", "retries=$retries", "dnsRegion=$dnsRegion", "scanPorts=$scanPorts",
+        "detectedOperatorKey=$detectedOperatorKey",
         "testFragmentBypass=$testFragmentBypass", "testEch=$testEch", "testQuic=$testQuic",
         "testCdnEdge=$testCdnEdge", "testAlpnMatrix=$testAlpnMatrix", "testDnsTransport=$testDnsTransport",
         "deepScan=$deepScan", "dedupByIp=$dedupByIp", "recordFragmentSplits=$recordFragmentSplits",

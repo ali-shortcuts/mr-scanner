@@ -9,10 +9,13 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
+import com.mrscanner.omega.core.network.AfghanOperators
+import com.mrscanner.omega.core.network.DnsPerformanceStore
 import com.mrscanner.omega.core.plugin.NetworkProfile
 import com.mrscanner.omega.core.scheduler.ScanEngine
 import com.mrscanner.omega.core.settings.ConsoleSettings
 import com.mrscanner.omega.network.AndroidNetworkProfile
+import com.mrscanner.omega.network.SimOperatorDetector
 import com.mrscanner.omega.service.ScanForegroundService
 import java.io.File
 
@@ -46,17 +49,29 @@ class OmegaApp : Application() {
         }
         val profile = runCatching { AndroidNetworkProfile.detect(this) }
             .getOrDefault(NetworkProfile.UNKNOWN)
+        // Detected once at process start; the resolver ranking that uses this
+        // key (DnsPerformanceStore) degrades to the static region list if
+        // detection fails or the device has no SIM, so this is never fatal.
+        runCatching {
+            val op = SimOperatorDetector.detect(this)
+            settings.detectedOperatorKey = op.mccMnc
+            val known = AfghanOperators.lookup(op.mccMnc)
+            Log.i(TAG, "operator=${op.mccMnc} (${known?.brand ?: op.simOperatorName ?: "unknown"})")
+        }.onFailure { Log.e(TAG, "SIM operator detection failed", it) }
+        val dnsPerf = runCatching { DnsPerformanceStore(File(dataDir, "dns-performance.tsv")) }
+            .getOrElse { Log.e(TAG, "DnsPerformanceStore failed, using in-memory only", it); DnsPerformanceStore() }
         engine = runCatching {
             ScanEngine(
                 settings = settings,
                 holeStore = HoleAgeStore(dataDir),
                 checkpointStore = CheckpointStore(dataDir),
+                dnsPerf = dnsPerf,
                 profile = profile,
                 database = null // NEVER JDBC on Android
             )
         }.getOrElse {
             Log.e(TAG, "ScanEngine failed, using bare engine", it)
-            ScanEngine(settings = settings, profile = profile, database = null)
+            ScanEngine(settings = settings, dnsPerf = dnsPerf, profile = profile, database = null)
         }
         runCatching { createScanChannel() }
             .onFailure { Log.e(TAG, "notification channel failed", it) }

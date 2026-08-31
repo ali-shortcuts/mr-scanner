@@ -28,6 +28,7 @@ class ScanEngine(
     val holeStore: HoleAgeStore = HoleAgeStore(),
     val checkpointStore: CheckpointStore = CheckpointStore(),
     val cidrCheckpointStore: CidrCheckpointStore = CidrCheckpointStore(),
+    val dnsPerf: com.mrscanner.omega.core.network.DnsPerformanceStore = com.mrscanner.omega.core.network.DnsPerformanceStore(),
     val history: ScanHistoryStore = ScanHistoryStore(),
     var profile: NetworkProfile = NetworkProfile.UNKNOWN,
     val database: OmegaDatabase? = null
@@ -62,7 +63,7 @@ class ScanEngine(
         // under concurrent scanning was never guaranteed to match list order, so an index
         // cursor could under- or over-skip on resume. A completed-set is exact either way.
         val targets = hosts.filterNot { it in completedSet }
-        val plugins = PluginRegistry.createAll(settings)
+        val plugins = PluginRegistry.createAll(settings, dnsPerf)
         val concurrency = settings.concurrency.coerceIn(1, 4096)
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "scan=$scanId hosts=${hosts.size} plugins=${plugins.size} profile=$profile budget=${BudgetGuard.forProfile(profile, settings.budgetProfileOverride).budget.label}"))
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "configHash=$configHash"))
@@ -164,7 +165,7 @@ class ScanEngine(
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM",
             "cidr=$scanId range=${range.spec} total=${range.total} concurrency=$concurrency ports=$ports"))
 
-        val plugins = PluginRegistry.createAll(settings)
+        val plugins = PluginRegistry.createAll(settings, dnsPerf)
         val done = AtomicLong(startAt)
         val alive = AtomicLong(aliveSoFar)
         val hits = CopyOnWriteArrayList<HostScanResult>()
@@ -219,7 +220,7 @@ class ScanEngine(
     }
 
     suspend fun scanOne(host: String, dag: PluginDagExecutor? = null): HostScanResult {
-        val plugins = PluginRegistry.createAll(settings)
+        val plugins = PluginRegistry.createAll(settings, dnsPerf)
         val executor = dag ?: PluginDagExecutor(plugins)
         val ctx = ScanContext(profile = profile, timeoutMs = settings.timeoutMs)
         // Prefill temporal hole metadata for timeconsistency plugin

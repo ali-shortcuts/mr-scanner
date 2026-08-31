@@ -1,10 +1,11 @@
 package com.mrscanner.omega.core.plugin
+import com.mrscanner.omega.core.network.DnsPerformanceStore
 import com.mrscanner.omega.core.network.MultiResolverDns
 import com.mrscanner.omega.core.settings.ConsoleSettings
 
 object PluginRegistry {
-    fun createAll(settings: ConsoleSettings): List<ScanPlugin> {
-        val multi = MultiResolverDns(settings.customDnsServers, settings.dnsRegion)
+    fun createAll(settings: ConsoleSettings, dnsPerf: DnsPerformanceStore = DnsPerformanceStore()): List<ScanPlugin> {
+        val multi = MultiResolverDns(settings.customDnsServers, settings.dnsRegion, operatorKey = settings.detectedOperatorKey, perf = dnsPerf)
         val all = mutableListOf<ScanPlugin>()
         // 22 base
         all += TcpConnectPlugin(); all += DnsPlugin(multi); all += DnsMultiPlugin(multi)

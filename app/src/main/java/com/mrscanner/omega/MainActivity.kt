@@ -25,6 +25,7 @@ import com.mrscanner.omega.core.cli.CliOutputLine
 import com.mrscanner.omega.core.cli.CliSession
 import com.mrscanner.omega.core.cli.commands.CommandFactory
 import com.mrscanner.omega.core.eventbus.ScanEvent
+import com.mrscanner.omega.core.network.AfghanOperators
 import com.mrscanner.omega.core.plugin.PluginRegistry
 import com.mrscanner.omega.core.plugin.SignalPolarity
 import com.mrscanner.omega.core.plugin.Verdict
@@ -238,7 +239,24 @@ class MainActivity : AppCompatActivity() {
         val timeout = v.findViewById<EditText>(R.id.inputTimeout)
         val dnsRegion = v.findViewById<EditText>(R.id.inputDnsRegion)
         val customDns = v.findViewById<EditText>(R.id.inputCustomDns)
+        val operatorLabel = v.findViewById<TextView>(R.id.labelOperator)
         val settings = OmegaApp.instance.settings
+
+        val opKey = settings.detectedOperatorKey
+        val opName = AfghanOperators.lookup(opKey)?.brand ?: if (opKey != null) "unknown ($opKey)" else "not detected"
+        val ranked = if (opKey != null) OmegaApp.instance.engine.dnsPerf.summary(opKey) else emptyList()
+        operatorLabel.text = buildString {
+            append("$opName${opKey?.let { " [$it]" } ?: ""}\n")
+            if (ranked.isEmpty()) {
+                append("no DNS performance data yet — ranking starts after the first scan on this SIM")
+            } else {
+                append("ranked by measured success (this device, this SIM):\n")
+                ranked.take(6).forEach { (id, s) ->
+                    val rtt = if (s.avgRttMs == Double.MAX_VALUE) "—" else "${s.avgRttMs.toInt()}ms"
+                    append("  $id: ${(s.successRate * 100).toInt()}% ok, $rtt avg (${s.samples} samples)\n")
+                }
+            }
+        }
 
         fun renderConcurrency(c: Int) { label.text = "concurrency = $c  (ceiling 4096 — higher risks socket/thread exhaustion, not more throughput)" }
         seek.progress = settings.concurrency
