@@ -44,6 +44,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Main shell — branding & About match architecture §9 exactly.
@@ -299,12 +300,14 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = false
             results.text = ""
             status.text = "Scanning ${hosts.size}…"
-            val bind = CellularNetworkBinder.bindToCellular(this@MainActivity)
-            if (bind.bound) status.text = "Scanning ${hosts.size}… [${bind.detail}]"
             OmegaApp.instance.promoteScanService()
             bar.progress = 0
             scanJob = scope.launch {
                 val engine = OmegaApp.instance.engine
+                // bindToCellular() blocks on a CountDownLatch for up to 4s — never call it
+                // on the UI thread (that was freezing/ANR-ing the app on every Start tap).
+                val bind = withContext(Dispatchers.IO) { CellularNetworkBinder.bindToCellular(this@MainActivity) }
+                if (bind.bound) status.text = "Scanning ${hosts.size}… [${bind.detail}]"
                 val collector = launch {
                     engine.eventBus.events.collect { ev ->
                         when (ev) {
@@ -369,11 +372,11 @@ class MainActivity : AppCompatActivity() {
             results.text = ""
             val totalAll = ranges.sumOf { it.total }
             status.text = "Scanning ${ranges.size} range(s), $totalAll host(s) total…"
-            val bind = CellularNetworkBinder.bindToCellular(this@MainActivity)
             OmegaApp.instance.promoteScanService()
             bar.progress = 0
             cidrJob = scope.launch {
                 val engine = OmegaApp.instance.engine
+                val bind = withContext(Dispatchers.IO) { CellularNetworkBinder.bindToCellular(this@MainActivity) }
                 val collector = launch {
                     engine.eventBus.events.collect { ev ->
                         when (ev) {
@@ -564,19 +567,25 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             reqPickHostFile, reqPickCidrFile -> {
-                try {
-                    val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-                    val name = queryDisplayName(uri) ?: "file"
-                    if (requestCode == reqPickHostFile) {
-                        pendingHostsField?.setText(lines.joinToString("\n"))
-                        Toast.makeText(this, "Loaded ${lines.size} host(s) from $name", Toast.LENGTH_SHORT).show()
-                    } else {
-                        pendingCidrField?.setText(lines.joinToString("\n"))
-                        Toast.makeText(this, "Loaded ${lines.size} range(s) from $name", Toast.LENGTH_SHORT).show()
+                val label = if (requestCode == reqPickHostFile) "host(s)" else "range(s)"
+                Toast.makeText(this, "Loading…", Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    try {
+                        // Disk read + line parsing was running synchronously on the UI
+                        // thread here — for a large file that's exactly what froze/blacked
+                        // out the app. Do it on IO, then hop back to the main thread only
+                        // to touch the views.
+                        val (lines, name) = withContext(Dispatchers.IO) {
+                            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                            val parsed = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
+                            parsed to (queryDisplayName(uri) ?: "file")
+                        }
+                        if (requestCode == reqPickHostFile) pendingHostsField?.setText(lines.joinToString("\n"))
+                        else pendingCidrField?.setText(lines.joinToString("\n"))
+                        Toast.makeText(this@MainActivity, "Loaded ${lines.size} $label from $name", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, "Failed to read file: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Failed to read file: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }

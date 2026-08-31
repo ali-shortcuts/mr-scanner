@@ -1,6 +1,5 @@
 package com.mrscanner.omega.core.cli
 import com.mrscanner.omega.core.eventbus.EventBus
-import com.mrscanner.omega.core.eventbus.ScanEvent
 import com.mrscanner.omega.core.scheduler.ScanEngine
 import com.mrscanner.omega.core.settings.ConsoleSettings
 import kotlinx.coroutines.flow.Flow
@@ -63,9 +62,7 @@ class CliInterpreter(private val registry: CliCommandRegistry, private val engin
         val tokens = tokenize(trimmed)
         val cmd = registry.get(tokens.first())
         if (cmd == null) { emit(CliOutputLine(CliOutputLine.Kind.STDERR, "unknown command: ${tokens.first()} — try 'help'")); return@flow }
-        cmd.run(CliArgs.parse(tokens.drop(1)), session, engine).collect { line ->
-            emit(line); eventBus.tryEmit(ScanEvent.LogEmitted(line.kind.name, line.text, line.ts))
-        }
+        cmd.run(CliArgs.parse(tokens.drop(1)), session, engine).collect { line -> emit(line) }
     }
     companion object {
         fun tokenize(input: String): List<String> {
