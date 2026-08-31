@@ -8,5 +8,5 @@ plugins {
 // :cli:distZip output filename to a stale "2.0.0-omega" for every release
 // from 2.1.0 through 2.4.0 because nobody had to touch this line to bump
 // the app version, so nobody did.
-allprojects { group = "com.mrscanner.omega"; version = "2.4.0-unbound" }
+allprojects { group = "com.mrscanner.omega"; version = "2.4.1-hotfix" }
 tasks.register("clean", Delete::class) { delete(rootProject.layout.buildDirectory) }

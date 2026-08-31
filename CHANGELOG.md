@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.4.1-hotfix
+
+Real device-testing found three bugs from v2.4.0-unbound that made the new Scan Host/CIDR and Terminal features effectively unusable:
+
+- **App froze/went black on every "Start" tap** (Scan Host and Scan CIDR): `CellularNetworkBinder.bindToCellular()` blocks on a `CountDownLatch` for up to 4 seconds, and it was being called directly on the UI thread inside the button click handler — well past Android's ANR threshold. Moved off the UI thread.
+- **App froze when loading a host/CIDR list from a file**: the file-picker result handler read and parsed the file synchronously on the UI thread. Moved to a background coroutine.
+- **Terminal printed every command's output twice**: `CliInterpreter` was re-broadcasting command output onto the same event bus Terminal's new live-feed listener also reads from. Removed the redundant rebroadcast.
+
 ## v2.4.0-unbound
 
 ### Scan engine
