@@ -5,6 +5,7 @@ import com.mrscanner.omega.core.cli.commands.CommandFactory
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
 import com.mrscanner.omega.core.db.OmegaDatabase
+import com.mrscanner.omega.core.db.ScanHistoryStore
 import com.mrscanner.omega.core.network.DnsPerformanceStore
 import com.mrscanner.omega.core.plugin.NetworkProfile
 import com.mrscanner.omega.core.scheduler.ScanEngine
@@ -19,6 +20,7 @@ fun main(args: Array<String>) = runBlocking {
     val db = OmegaDatabase.open(dataDir)
     val engine = ScanEngine(settings, holeStore = HoleAgeStore(dataDir),
         checkpointStore = CheckpointStore(dataDir), dnsPerf = DnsPerformanceStore(File(dataDir, "dns-performance.tsv")),
+        history = ScanHistoryStore(File(dataDir, "history")), historyDir = File(dataDir, "history"),
         profile = NetworkProfile.WIFI_UNMETERED, database = db)
     val interpreter = CliInterpreter(CommandFactory.defaultRegistry(), engine)
     val session = CliSession(settings)

@@ -30,6 +30,8 @@ class ScanEngine(
     val cidrCheckpointStore: CidrCheckpointStore = CidrCheckpointStore(),
     val dnsPerf: com.mrscanner.omega.core.network.DnsPerformanceStore = com.mrscanner.omega.core.network.DnsPerformanceStore(),
     val history: ScanHistoryStore = ScanHistoryStore(),
+    /** Where per-scan export artifacts (JSON + CSV) get written on completion, for History/Export to read later. Null = in-memory only, no export files. */
+    val historyDir: java.io.File? = null,
     var profile: NetworkProfile = NetworkProfile.UNKNOWN,
     val database: OmegaDatabase? = null
 ) {
@@ -39,6 +41,30 @@ class ScanEngine(
     }
     private fun saveCheckpoint(cp: com.mrscanner.omega.core.model.CheckpointRecord) {
         if (database != null) database.checkpoints.save(cp) else checkpointStore.save(cp)
+    }
+
+    /** Writes JSON + CSV export artifacts and records the History index entry for a completed scan.
+     * Best-effort — a disk/export failure here must never take down the scan that just finished. */
+    private fun persistHistory(scanId: String, kind: String, target: String, hostCount: Int, foundCount: Int, wallMs: Long) {
+        try {
+            historyDir?.let { dir ->
+                export(scanId)?.let { dto ->
+                    com.mrscanner.omega.core.export.ResultJsonCodec.write(dto, java.io.File(dir, "$scanId.json"), settings.redactionLevel)
+                    com.mrscanner.omega.core.export.ResultCsvCodec.write(dto, java.io.File(dir, "$scanId.csv"), settings.redactionLevel)
+                }
+            }
+            history.recordCompletion(ScanHistoryStore.Meta(scanId, kind, target, System.currentTimeMillis(), hostCount, foundCount, wallMs))
+        } catch (e: Exception) {
+            eventBus.tryEmit(ScanEvent.LogEmitted("ERROR", "history persist failed for $scanId: ${e.message}"))
+        }
+    }
+
+    /** Reads back an already-written export artifact (JSON or CSV) for a past scan, e.g. for sharing
+     * from the app's History screen after the in-memory result list is gone. Null if never persisted. */
+    fun historyArtifact(scanId: String, csv: Boolean = false): java.io.File? {
+        val dir = historyDir ?: return null
+        val f = java.io.File(dir, "$scanId.${if (csv) "csv" else "json"}")
+        return if (f.isFile) f else null
     }
     private fun loadCheckpoint(id: String) =
         if (database != null) database.checkpoints.get(id) else checkpointStore.get(id)
@@ -106,11 +132,12 @@ class ScanEngine(
         val ordered = hosts.mapNotNull { h -> byHost[h] }
         history.put(scanId, ordered)
         val wall = System.currentTimeMillis() - t0
+        lastMeta[scanId] = Meta(configHash, profile.name, startedAt, Instant.now().toString())
+        persistHistory(scanId, "host", "${hosts.size} host(s)", ordered.size, foundCount.get(), wall)
         val counts = ordered.groupingBy { it.report.verdict.name }.eachCount()
         LocalMetricsStore.recordScan(ScanTiming(scanId, profile.name, ordered.size, wall, counts, 0))
         eventBus.emit(ScanEvent.ScanFinished(scanId, ordered.size, wall))
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM", "finished scan=$scanId hosts=${ordered.size} wallMs=$wall"))
-        lastMeta[scanId] = Meta(configHash, profile.name, startedAt, Instant.now().toString())
         return ordered
     }
 
@@ -145,6 +172,7 @@ class ScanEngine(
         ports: List<Int> = settings.scanPorts.ifEmpty { listOf(443, 80) }
     ): CidrScanSummary {
         val t0 = System.currentTimeMillis()
+        val startedAt = Instant.now().toString()
         val configHash = settings.configHash()
         var startAt = 0L
         var aliveSoFar = 0L
@@ -212,6 +240,9 @@ class ScanEngine(
 
         cidrCheckpointStore.save(CidrCheckpointRecord(scanId, range.spec, configHash, range.total, range.total, alive.get()))
         val wall = System.currentTimeMillis() - t0
+        history.put(scanId, hits.toList())
+        lastMeta[scanId] = Meta(configHash, profile.name, startedAt, Instant.now().toString())
+        persistHistory(scanId, "cidr", range.spec, hits.size, alive.get().toInt(), wall)
         eventBus.emit(ScanEvent.RangeProgress(scanId, range.total, range.total, alive.get(), null))
         eventBus.emit(ScanEvent.ScanFinished(scanId, hits.size, wall))
         eventBus.emit(ScanEvent.LogEmitted("SYSTEM",

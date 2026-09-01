@@ -20,7 +20,7 @@ object CommandFactory {
     fun defaultRegistry() = CliCommandRegistry(listOf(
         HelpCmd(), FullScanCmd(), HostScanCmd(), FragmentCmd(), SniCmd(), SelfTestCmd(),
         SetCmd(), GetCmd(), ExportCmd(), HolesCmd(), CheckpointCmd(), PluginsCmd(),
-        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd(), ApkScanCmd(), UpdateCmd(), DnsRankCmd()
+        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd(), ApkScanCmd(), UpdateCmd(), DnsRankCmd(), HistoryCmd()
     ))
 }
 
@@ -177,12 +177,31 @@ class GetCmd : CliCommand {
 }
 
 class ExportCmd : CliCommand {
-    override val name = "export"; override val usage = "export <scan-id> [--out=path]"; override val help = "Export JSON v1"
+    override val name = "export"; override val usage = "export <scan-id> [--out=path] [--format=json|csv]"; override val help = "Export a past scan (JSON or CSV)"
     override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
         val id = args.positionals.firstOrNull() ?: session.scanId ?: run { emit(err("scan id required")); return@flow }
-        val json = engine.exportJson(id) ?: run { emit(err("no scan $id")); return@flow }
+        val csv = args.flag("format")?.lowercase() == "csv"
         val path = args.flag("out")
-        if (path != null) { File(path).writeText(json); emit(out("wrote $path (${json.length} bytes)")) } else emit(out(json))
+        if (csv) {
+            val dto = engine.export(id) ?: run { emit(err("no scan $id")); return@flow }
+            val text = com.mrscanner.omega.core.export.ResultCsvCodec.encode(dto, session.settings.redactionLevel)
+            if (path != null) { File(path).writeText(text); emit(out("wrote $path (${text.length} bytes)")) } else emit(out(text))
+        } else {
+            val json = engine.exportJson(id) ?: run { emit(err("no scan $id")); return@flow }
+            if (path != null) { File(path).writeText(json); emit(out("wrote $path (${json.length} bytes)")) } else emit(out(json))
+        }
+    }
+}
+
+class HistoryCmd : CliCommand {
+    override val name = "history"; override val usage = "history"; override val help = "List past scans (most recent first)"
+    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
+        val entries = engine.history.list()
+        if (entries.isEmpty()) { emit(out("no scan history yet")); return@flow }
+        entries.forEach { m ->
+            val t = java.time.Instant.ofEpochMilli(m.finishedAt)
+            emit(out("${m.scanId}  ${m.kind}  ${m.target}  hosts=${m.hostCount} found=${m.foundCount} wallMs=${m.wallMs}  $t"))
+        }
     }
 }
 

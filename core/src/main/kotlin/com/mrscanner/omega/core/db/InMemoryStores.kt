@@ -91,9 +91,42 @@ class CidrCheckpointStore(private val persistDir: File? = null) {
     }
 }
 
-class ScanHistoryStore {
+class ScanHistoryStore(private val persistDir: File? = null) {
+    /** One line per completed scan. [target] is a short human label — host count or CIDR spec. */
+    data class Meta(val scanId: String, val kind: String, val target: String, val finishedAt: Long, val hostCount: Int, val foundCount: Int, val wallMs: Long)
+
     private val scans = ConcurrentHashMap<String, MutableList<HostScanResult>>()
+    private val metas = ConcurrentHashMap<String, Meta>()
+    init { persistDir?.mkdirs(); loadIndex() }
+
     fun put(id: String, r: List<HostScanResult>) { scans[id] = r.toMutableList() }
     fun get(id: String) = scans[id]
     fun ids() = scans.keys().toList()
+
+    /** Called once per finished scan (after [put]) — this is what makes History survive an app restart. */
+    fun recordCompletion(meta: Meta) {
+        metas[meta.scanId] = meta
+        val dir = persistDir ?: return
+        try {
+            File(dir, "index.tsv").appendText(
+                listOf(meta.scanId, meta.kind, meta.target, meta.finishedAt, meta.hostCount, meta.foundCount, meta.wallMs)
+                    .joinToString("\t") { it.toString().replace("\t", " ").replace("\n", " ") } + "\n"
+            )
+        } catch (_: Exception) { /* history is best-effort — never fails the scan it's recording */ }
+    }
+
+    /** Most recent first. Survives restart via the index file; [get] for full per-host results still
+     * needs the JSON artifact on disk (see ScanEngine.historyJsonFile) once the in-memory copy is gone. */
+    fun list(): List<Meta> = metas.values.sortedByDescending { it.finishedAt }
+
+    private fun loadIndex() {
+        val f = File(persistDir ?: return, "index.tsv"); if (!f.isFile) return
+        try {
+            f.forEachLine { line ->
+                val p = line.split("\t"); if (p.size < 7) return@forEachLine
+                val m = Meta(p[0], p[1], p[2], p[3].toLongOrNull() ?: 0L, p[4].toIntOrNull() ?: 0, p[5].toIntOrNull() ?: 0, p[6].toLongOrNull() ?: 0L)
+                metas[m.scanId] = m
+            }
+        } catch (_: Exception) { /* corrupt index — start with whatever parsed, not a crash */ }
+    }
 }
