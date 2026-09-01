@@ -27,7 +27,10 @@ class MultiResolverDns(
     private val extraResolvers: List<String> = emptyList(),
     private val region: String = "global",
     private val timeoutMs: Int = 2_500,
-    private val client: OkHttpClient = SharedOkHttpFactory.get(5_000)
+    private val client: OkHttpClient = SharedOkHttpFactory.get(5_000),
+    /** Detected SIM operator key, e.g. "412-20" — see SimOperatorDetector. Null = no per-operator ranking. */
+    private val operatorKey: String? = null,
+    private val perf: DnsPerformanceStore? = null
 ) {
     data class ResolverAnswer(
         val resolverId: String,
@@ -58,8 +61,11 @@ class MultiResolverDns(
                 ResolverAnswer("system", emptyList(), System.currentTimeMillis() - t0, e.message, "system")
             }
         }
-        // UDP servers by region + extras
-        for (server in udpServersFor(region) + extraResolvers) {
+        // UDP servers by region + extras — ranked by measured per-operator performance when available,
+        // so the resolver that has actually been working best on THIS SIM gets tried, not just region defaults.
+        val udpCandidates = udpServersFor(region) + extraResolvers
+        val orderedUdp = if (operatorKey != null && perf != null) perf.rankedResolvers(operatorKey, udpCandidates) else udpCandidates
+        for (server in orderedUdp) {
             val id = "udp:$server"
             tasks += Callable { udpQuery(host, server, id) }
         }
@@ -71,13 +77,17 @@ class MultiResolverDns(
         val pool = Executors.newFixedThreadPool(minOf(10, tasks.size))
         return try {
             val futures = tasks.map { pool.submit(it) }
-            futures.mapNotNull { f ->
+            val answers = futures.mapNotNull { f ->
                 try { f.get(timeoutMs.toLong() + 500, TimeUnit.MILLISECONDS) }
                 catch (e: Exception) {
                     ResolverAnswer("timeout", emptyList(), error = e.message)
                 }
             }.filter { it.resolverId != "timeout" || it.error != null }
                 .distinctBy { it.resolverId }
+            if (operatorKey != null && perf != null) {
+                for (a in answers) perf.record(operatorKey, a.resolverId, a.error == null && a.addresses.isNotEmpty(), a.rttMs.coerceAtLeast(0))
+            }
+            answers
         } finally {
             pool.shutdownNow()
         }

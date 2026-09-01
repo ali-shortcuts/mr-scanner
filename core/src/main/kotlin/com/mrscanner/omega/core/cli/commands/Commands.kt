@@ -20,7 +20,7 @@ object CommandFactory {
     fun defaultRegistry() = CliCommandRegistry(listOf(
         HelpCmd(), FullScanCmd(), HostScanCmd(), FragmentCmd(), SniCmd(), SelfTestCmd(),
         SetCmd(), GetCmd(), ExportCmd(), HolesCmd(), CheckpointCmd(), PluginsCmd(),
-        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd(), ApkScanCmd(), UpdateCmd()
+        ReverifyCmd(), DiffCmd(), MetricsCmd(), CidrCmd(), ApkScanCmd(), UpdateCmd(), DnsRankCmd()
     ))
 }
 
@@ -143,6 +143,27 @@ class SetCmd : CliCommand {
         val raw = args.positionals.joinToString(" "); if (!raw.contains("=")) { emit(err(usage)); return@flow }
         val k = raw.substringBefore("=").trim(); val v = raw.substringAfter("=").trim()
         if (session.settings.setKey(k, v)) emit(out("ok $k=$v hash=${session.settings.configHash()}")) else emit(err("unknown/invalid: $k"))
+    }
+}
+
+class DnsRankCmd : CliCommand {
+    override val name = "dnsrank"
+    override val usage = "dnsrank [operator-key]"
+    override val help = "Show measured per-operator DNS resolver ranking (see DnsPerformanceStore)"
+    override suspend fun run(args: CliArgs, session: CliSession, engine: ScanEngine) = flow {
+        val key = args.positionals.firstOrNull() ?: session.settings.detectedOperatorKey
+        if (key == null) {
+            emit(err("no operator key — pass one explicitly (e.g. 412-20) or set session.settings.detectedOperatorKey"))
+            return@flow
+        }
+        val known = com.mrscanner.omega.core.network.AfghanOperators.lookup(key)
+        emit(out("operator=$key ${known?.brand ?: "(unknown operator)"}"))
+        val ranked = engine.dnsPerf.summary(key)
+        if (ranked.isEmpty()) { emit(out("no measurements yet for this operator — ranking fills in as scans run")); return@flow }
+        ranked.forEach { (id, s) ->
+            val rtt = if (s.avgRttMs == Double.MAX_VALUE) "-" else "${s.avgRttMs.toInt()}ms"
+            emit(out("  $id  ${(s.successRate * 100).toInt()}% ok  $rtt avg  (${s.samples} samples)"))
+        }
     }
 }
 
