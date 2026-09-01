@@ -17,4 +17,12 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager --licenses || true
       - run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
-      - run: ./gradlew :app:assembleDebug --no-daemon
+      - run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --no-daemon 2>&1 | tee /tmp/app-build.log
+      - name: Surface real gradle error as annotations
+        if: failure()
+        run: |
+          grep -E "error:|FAILED|Execution failed|e: |Manifest merger failed" /tmp/app-build.log | tail -40 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
