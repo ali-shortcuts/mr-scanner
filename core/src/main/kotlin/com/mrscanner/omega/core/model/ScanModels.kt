@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
 )
 @Serializable data class ScanExportDto(
     val schemaVersion: Int = 1, val engine: String = "confidence-v3",
-    val appVersion: String = "2.0.0-omega", val configHash: String, val scanId: String,
+    val appVersion: String = "2.4.1-hotfix", val configHash: String, val scanId: String,
     val profile: String, val startedAt: String, val finishedAt: String, val hosts: List<HostResultDto>
 )
 

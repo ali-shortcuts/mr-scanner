@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.mrscanner.omega.core.db.CheckpointStore
 import com.mrscanner.omega.core.db.HoleAgeStore
+import com.mrscanner.omega.core.db.ScanHistoryStore
 import com.mrscanner.omega.core.network.AfghanOperators
 import com.mrscanner.omega.core.network.DnsPerformanceStore
 import com.mrscanner.omega.core.plugin.NetworkProfile
@@ -66,6 +67,8 @@ class OmegaApp : Application() {
                 holeStore = HoleAgeStore(dataDir),
                 checkpointStore = CheckpointStore(dataDir),
                 dnsPerf = dnsPerf,
+                history = ScanHistoryStore(File(dataDir, "history")),
+                historyDir = File(dataDir, "history"),
                 profile = profile,
                 database = null // NEVER JDBC on Android
             )

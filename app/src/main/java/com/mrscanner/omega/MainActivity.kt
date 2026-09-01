@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -217,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         val subHost = root.findViewById<Button>(R.id.subTabHost)
         val subCidr = root.findViewById<Button>(R.id.subTabCidr)
         val settingsBtn = root.findViewById<Button>(R.id.btnScanSettings)
+        val historyBtn = root.findViewById<Button>(R.id.btnScanHistory)
         val sub = root.findViewById<FrameLayout>(R.id.scanSubContent)
 
         fun selectSub(mode: Int) {
@@ -228,7 +230,48 @@ class MainActivity : AppCompatActivity() {
         subHost.setOnClickListener { selectSub(0) }
         subCidr.setOnClickListener { selectSub(1) }
         settingsBtn.setOnClickListener { showScanSettingsDialog() }
+        historyBtn.setOnClickListener { showHistoryDialog() }
         selectSub(scanSubMode)
+    }
+
+    private fun showHistoryDialog() {
+        val v = layoutInflater.inflate(R.layout.fragment_history, null)
+        val list = v.findViewById<LinearLayout>(R.id.historyList)
+        val empty = v.findViewById<TextView>(R.id.historyEmpty)
+        val entries = OmegaApp.instance.engine.history.list()
+        empty.isVisible = entries.isEmpty()
+        val dialog = AlertDialog.Builder(this).setView(v).create()
+        v.findViewById<Button>(R.id.btnHistoryClose).setOnClickListener { dialog.dismiss() }
+
+        entries.forEach { m ->
+            val row = layoutInflater.inflate(R.layout.row_history, list, false)
+            val t = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(m.finishedAt))
+            row.findViewById<TextView>(R.id.rowTitle).text = "${m.kind}: ${m.target}"
+            row.findViewById<TextView>(R.id.rowDetail).text = "hosts=${m.hostCount}  found=${m.foundCount}  ${m.wallMs}ms  ·  $t  ·  ${m.scanId}"
+            row.findViewById<Button>(R.id.rowShareJson).setOnClickListener { shareHistoryArtifact(m.scanId, csv = false) }
+            row.findViewById<Button>(R.id.rowShareCsv).setOnClickListener { shareHistoryArtifact(m.scanId, csv = true) }
+            list.addView(row)
+        }
+        dialog.show()
+    }
+
+    private fun shareHistoryArtifact(scanId: String, csv: Boolean) {
+        val file = OmegaApp.instance.engine.historyArtifact(scanId, csv)
+        if (file == null) {
+            Toast.makeText(this, "No ${if (csv) "CSV" else "JSON"} export saved for this scan", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = if (csv) "text/csv" else "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Share scan $scanId"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Share failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun showScanSettingsDialog() {

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+    android:background="#121A2F" android:layout_marginBottom="8dp" android:padding="10dp">
+    <TextView android:id="@+id/rowTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:fontFamily="monospace" android:textColor="#E8F1FF" android:textSize="13sp" android:textStyle="bold"/>
+    <TextView android:id="@+id/rowDetail" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:fontFamily="monospace" android:textColor="#B0B8C8" android:textSize="11sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+        <Button android:id="@+id/rowShareJson" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginEnd="4dp" android:backgroundTint="#2A3550"
+            android:text="Share JSON" android:textAllCaps="false" android:textSize="11sp"/>
+        <Button android:id="@+id/rowShareCsv" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:backgroundTint="#2A3550"
+            android:text="Share CSV" android:textAllCaps="false" android:textSize="11sp"/>
+    </LinearLayout>
+</LinearLayout>

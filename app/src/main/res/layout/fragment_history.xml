@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="Scan History" android:textColor="#E8F1FF" android:textSize="16sp" android:textStyle="bold"/>
+        <Button android:id="@+id/btnHistoryClose" android:layout_width="44dp" android:layout_height="wrap_content"
+            android:backgroundTint="#2A3550" android:text="✕" android:textAllCaps="false"/>
+    </LinearLayout>
+    <TextView android:id="@+id/historyEmpty" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:gravity="center" android:text="No scans yet."
+        android:textColor="#7C8AA8" android:textSize="12sp" android:visibility="gone"/>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="8dp" android:layout_weight="1">
+        <LinearLayout android:id="@+id/historyList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
+    </ScrollView>
+</LinearLayout>
