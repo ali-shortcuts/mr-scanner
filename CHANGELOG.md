@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.5.0-fingerprint
+
+### Adaptive per-operator DNS
+- `AfghanOperators`: MCC 412 → MNC table (AWCC, Roshan, Areeba/ATOMA, Etisalat, Afghan Telecom/Salaam), cross-checked against three independent sources rather than hardcoded from memory.
+- `DnsPerformanceStore`: learns which DNS resolver actually works best per detected SIM operator from real query results (success rate + latency) instead of a static list — visible in the Settings dialog and via the new `dnsrank` CLI command.
+
+### Persistent scan History + export
+- Scan History now survives an app restart (was in-memory only) and CIDR scans are recorded to it for the first time (they were silently absent before).
+- CSV export alongside the existing JSON export; History screen (📜 next to Settings) lists past scans with Share JSON / Share CSV.
+
+### Real fingerprinting
+- **Favicon hashing** is now real MurmurHash3 x86_32 in Shodan's exact convention (base64 + 76-char line wrapping), replacing an FNV-1a placeholder that said so in its own comment. Cross-checked against the Python `mmh3` reference package.
+- **JARM** is now the real algorithm (10 crafted TLS ClientHello probes + fuzzy hash), ported from the official salesforce/jarm source, replacing a placeholder that was just `hashCode()` of a string. Validated offline against the unmodified reference functions (cipher ordering, the hash algorithm, and response parsing) since this build environment has no arbitrary live-network access to test the socket I/O itself against a real server.
+- Both are real plugins now (`FaviconPlugin`, `JarmPlugin`) — neither was wired to anything before.
+
 ## v2.4.1-hotfix
 
 Real device-testing found three bugs from v2.4.0-unbound that made the new Scan Host/CIDR and Terminal features effectively unusable:
