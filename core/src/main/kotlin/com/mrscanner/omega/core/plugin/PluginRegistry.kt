@@ -7,7 +7,7 @@ object PluginRegistry {
     fun createAll(settings: ConsoleSettings, dnsPerf: DnsPerformanceStore = DnsPerformanceStore()): List<ScanPlugin> {
         val multi = MultiResolverDns(settings.customDnsServers, settings.dnsRegion, operatorKey = settings.detectedOperatorKey, perf = dnsPerf)
         val all = mutableListOf<ScanPlugin>()
-        // 22 base
+        // 23 base
         all += TcpConnectPlugin(); all += DnsPlugin(multi); all += DnsMultiPlugin(multi)
         all += Ipv4Plugin(); all += Ipv6Plugin(); all += HttpPlugin(); all += HttpsPlugin()
         all += TlsPlugin(); all += CertificatePlugin(); all += RedirectPlugin()
@@ -15,6 +15,7 @@ object PluginRegistry {
         all += HttpVersionPlugin(); all += SecurityHeaderPlugin(); all += CookiePlugin()
         all += RobotsPlugin(); all += SitemapPlugin(); all += FingerprintPlugin()
         all += BannerPlugin(); all += CdnWafPlugin(); all += TlsFingerprintPlugin()
+        all += FaviconPlugin(); all += JarmPlugin()
         // 9 bypass
         all += SniFrontingPlugin { settings.sniSpoofCandidates.ifEmpty { listOf("cloudflare.com","www.cloudflare.com","cdnjs.cloudflare.com") } }
         if (settings.testFragmentBypass) all += TlsFragmentationPlugin()
@@ -49,6 +50,8 @@ object PluginRegistry {
         CatalogEntry("fingerprint","Fingerprint",true,"MODERATE","base"), CatalogEntry("dnsmulti","DNS Multi",true,"MODERATE","base"),
         CatalogEntry("banner","Banner",true,"WEAK","base"), CatalogEntry("cdnwaf","CDN/WAF",true,"MODERATE","base"),
         CatalogEntry("tlsfingerprint","TLS FP",true,"WEAK","base"),
+        CatalogEntry("favicon","Favicon hash",false,"—","base"),
+        CatalogEntry("jarm","JARM TLS FP",false,"—","base"),
         CatalogEntry("snifronting","SNI Fronting",true,"STRONG","bypass"), CatalogEntry("tlsfragment","TLS Fragment",true,"DEFINITIVE","bypass"),
         CatalogEntry("payloadinjection","Payload Injection",true,"MODERATE","bypass"), CatalogEntry("dohbypass","DoH",true,"MODERATE","bypass"),
         CatalogEntry("headerinjection","Header Injection",true,"MODERATE","bypass"), CatalogEntry("zerorated","Zero-Rated",true,"STRONG","bypass"),

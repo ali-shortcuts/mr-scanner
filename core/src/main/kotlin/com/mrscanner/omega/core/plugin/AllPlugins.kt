@@ -1,6 +1,7 @@
 package com.mrscanner.omega.core.plugin
 
 import com.mrscanner.omega.core.network.*
+import com.mrscanner.omega.core.fingerprint.FaviconHasher
 import okhttp3.Request
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -369,6 +370,83 @@ class CdnWafPlugin : ScanPlugin {
         return PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.MODERATE, cdn),
             cdn?.let { "cdn=$it" } ?: "no CDN fingerprint", mapOf("cdn" to (cdn ?: "")),
             durationMs = System.currentTimeMillis() - t0)
+    }
+}
+
+/**
+ * Fetches /favicon.ico and hashes it the Shodan-compatible way (see
+ * [FaviconHasher]). This is signal-neutral (ABSTAIN) on its own — a
+ * favicon hash doesn't by itself indicate a bypass, it's an
+ * identification fingerprint for cross-referencing against known hosts
+ * — so it never contributes to the confidence score, only to `details`.
+ */
+class FaviconPlugin : ScanPlugin {
+    override val id = "favicon"; override val displayName = "Favicon hash"
+    override val evidenceClass = EvidenceClass.WEAK
+    override val cost = PluginCost(1200, 65536, 1)
+    override val dependsOn = emptySet<String>()
+    override val requiredProfile = emptySet<NetworkProfile>()
+    override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
+        val t0 = System.currentTimeMillis()
+        return PluginHelpers.safeScan(id, EvidenceClass.WEAK, t0) {
+            val client = SharedOkHttpFactory.get(ctx.timeoutMs)
+            var bytes: ByteArray? = null
+            var via = ""
+            for (scheme in listOf("https", "http")) {
+                try {
+                    val req = Request.Builder().url("$scheme://${target.host}/favicon.ico")
+                        .header("User-Agent", "MrScannerOmega/2.0").get().build()
+                    client.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val body = resp.body?.bytes()
+                            if (body != null && body.isNotEmpty()) { bytes = body; via = scheme }
+                        }
+                    }
+                } catch (_: Exception) { /* try next scheme */ }
+                if (bytes != null) break
+            }
+            val data = bytes
+            if (data == null) {
+                PluginHelpers.abstain(id, "no favicon.ico ($via)", t0, EvidenceClass.WEAK)
+            } else {
+                val hash = FaviconHasher.hash(data)
+                PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.WEAK),
+                    "favicon hash=$hash (${data.size}B via $via)",
+                    mapOf("faviconHash" to hash.toString(), "faviconBytes" to data.size.toString(), "faviconScheme" to via),
+                    durationMs = System.currentTimeMillis() - t0)
+            }
+        }
+    }
+}
+
+/**
+ * Real JARM (see [com.mrscanner.omega.core.fingerprint.JarmProbe] for the
+ * full algorithm and validation notes). Ten real TCP connections + TLS
+ * ClientHellos per host, so this is one of the most expensive plugins in
+ * the DAG on purpose — BudgetGuard should be the thing deciding whether
+ * it's worth running on a given profile, not this plugin pretending to
+ * be cheap. Signal-neutral (ABSTAIN) for the same reason as favicon: a
+ * TLS fingerprint identifies infrastructure, it doesn't by itself imply
+ * a zero-rating bypass.
+ */
+class JarmPlugin : ScanPlugin {
+    override val id = "jarm"; override val displayName = "JARM"
+    override val evidenceClass = EvidenceClass.WEAK
+    override val cost = PluginCost(estMs = 8_000, estBytes = 15_000, estConnections = 10)
+    override val dependsOn = setOf("tcpconnect")
+    override val requiredProfile = emptySet<NetworkProfile>()
+    override suspend fun scan(target: ScanTarget, ctx: ScanContext): PluginResult {
+        val t0 = System.currentTimeMillis()
+        return PluginHelpers.safeScan(id, EvidenceClass.WEAK, t0) {
+            val hash = com.mrscanner.omega.core.fingerprint.JarmProbe.compute(target.host, target.port, ctx.timeoutMs.toInt())
+            val blank = hash == "0".repeat(62)
+            if (blank) {
+                PluginHelpers.abstain(id, "no TLS response (timeout on all 10 probes)", t0, EvidenceClass.WEAK)
+            } else {
+                PluginResult(id, PluginSignal(id, SignalPolarity.ABSTAIN, EvidenceClass.WEAK),
+                    "jarm=$hash", mapOf("jarm" to hash), durationMs = System.currentTimeMillis() - t0)
+            }
+        }
     }
 }
 
